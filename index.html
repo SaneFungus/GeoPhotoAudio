@@ -8,6 +8,12 @@
         body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background: #0f172a; color: #e2e8f0; }
         h2 { text-align: center; color: #38bdf8; margin-bottom: 5px; }
         p.subtitle { text-align: center; font-size: 12px; color: #94a3b8; margin-bottom: 20px; }
+        
+        /* Stylizacja sekcji wzmocnienia */
+        .gain-container { background: #1e293b; padding: 15px; border-radius: 12px; margin-bottom: 15px; border: 1px solid #334155; }
+        .gain-container label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 8px; font-size: 14px;}
+        input[type="range"] { width: 100%; cursor: pointer; accent-color: #38bdf8; }
+        
         button { background: #0ea5e9; color: white; border: none; padding: 16px 20px; font-size: 16px; font-weight: bold; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 20px; transition: background 0.3s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         button:disabled { background: #475569; cursor: not-allowed; color: #94a3b8; }
         video { width: 100%; border-radius: 12px; margin-bottom: 10px; background: #000; border: 2px solid #1e293b; }
@@ -20,9 +26,18 @@
 <body>
 
     <h2>Rejestrator Chwili</h2>
-    <p class="subtitle">Wersja Ultimate (Wysokie Audio + Metadane)</p>
+    <p class="subtitle">Wersja Ultimate (Wysokie Audio + Wzmocnienie + Metadane)</p>
     
     <video id="camera" autoplay playsinline muted></video>
+    
+    <div class="gain-container">
+        <label>
+            <span>Wzmocnienie mikrofonu (Gain):</span>
+            <span id="gainValueDisplay">3.0x</span>
+        </label>
+        <input type="range" id="gainControl" min="1" max="10" step="0.5" value="3.0">
+    </div>
+
     <canvas id="spectrogram" width="600" height="150"></canvas>
     
     <button id="captureBtn">Zarejestruj Chwilę (Zdjęcie, 10s Audio, Metadane)</button>
@@ -34,10 +49,13 @@
         const canvasCtx = spectrogramCanvas.getContext('2d', { willReadFrequently: true });
         const captureBtn = document.getElementById('captureBtn');
         const statusDiv = document.getElementById('status');
+        const gainControl = document.getElementById('gainControl');
+        const gainValueDisplay = document.getElementById('gainValueDisplay');
         
         let mediaRecorder;
         let audioChunks = [];
         let audioContext;
+        let gainNode;
 
         const fetchWithTimeout = async (url, timeout = 5000) => {
             const controller = new AbortController();
@@ -47,7 +65,6 @@
             return response;
         };
 
-        // 1. Inicjalizacja Mediów (Z oddzieleniem audio w wysokiej jakości)
         async function initMedia() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -60,32 +77,52 @@
                     } 
                 });
                 
-                // Wideo idzie tylko do podglądu (do zrobienia zdjęcia)
                 video.srcObject = stream;
                 
-                // Wydzielamy sam dźwięk dla nagrywarki
+                // Budowa wirtualnego przedwzmacniacza (Audio Pipeline)
                 const audioStream = new MediaStream(stream.getAudioTracks());
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 
-                // Odpalamy spektrogram
-                setupSpectrogram(audioStream);
+                const source = audioContext.createMediaStreamSource(audioStream);
+                
+                // Węzeł wzmocnienia (Gain)
+                gainNode = audioContext.createGain();
+                gainNode.gain.value = gainControl.value;
+                
+                // Miejsce docelowe dla nagrywarki
+                const destination = audioContext.createMediaStreamDestination();
+                
+                // Analizator dla spektrogramu
+                const analyser = audioContext.createAnalyser();
+                analyser.fftSize = 1024;
 
+                // Łączenie sygnału: Mikrofon -> Wzmocnienie -> (Analizator + Nagrywarka)
+                source.connect(gainNode);
+                gainNode.connect(analyser);
+                gainNode.connect(destination);
+
+                setupSpectrogram(analyser);
+
+                // Zapisujemy wzmocniony strumień
                 const options = { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 320000 };
-                mediaRecorder = new MediaRecorder(audioStream, options);
+                mediaRecorder = new MediaRecorder(destination.stream, options);
                 mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); };
             } catch (err) {
                 statusDiv.innerText = "Błąd dostępu do kamery/mikrofonu: " + err.message;
             }
         }
 
-        // Funkcja do rysowania spektrogramu (czarno-biały)
-        function setupSpectrogram(stream) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const source = audioContext.createMediaStreamSource(stream);
-            const analyser = audioContext.createAnalyser();
-            
-            analyser.fftSize = 1024;
-            source.connect(analyser);
+        // Obsługa suwaka wzmocnienia w czasie rzeczywistym
+        gainControl.addEventListener('input', (e) => {
+            const val = e.target.value;
+            gainValueDisplay.innerText = val + "x";
+            if (gainNode) {
+                gainNode.gain.value = val;
+            }
+        });
 
+        // Zmodyfikowany spektrogram - teraz przyjmuje już węzeł analizatora
+        function setupSpectrogram(analyser) {
             const bufferLength = analyser.frequencyBinCount;
             const dataArray = new Uint8Array(bufferLength);
 
@@ -112,7 +149,6 @@
             draw();
         }
 
-        // Funkcje pobierające metadane (Zostawione bez zmian)
         function getAstrology(date) {
             const d = date.getDate(), m = date.getMonth() + 1, y = date.getFullYear();
             const zodiacs = ["Koziorożec", "Wodnik", "Ryby", "Baran", "Byk", "Bliźnięta", "Rak", "Lew", "Panna", "Waga", "Skorpion", "Strzelec", "Koziorożec"];
@@ -163,7 +199,11 @@
             try {
                 const res = await fetchWithTimeout('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
                 const data = await res.json();
-                return `Indeks Kp = ${data[data.length - 1][1]}`;
+                // Dodane zabezpieczenie struktury danych NOAA
+                if (data && data.length > 1 && data[data.length - 1] && data[data.length - 1][1] !== undefined) {
+                    return `Indeks Kp = ${data[data.length - 1][1]}`;
+                }
+                return "Brak danych (Oczekująca zmiana w NOAA)";
             } catch(e) { return "Brak danych"; }
         }
 
@@ -219,9 +259,7 @@
             } catch(e) { return { temp:"?", pressure:"?", wind:"?", clouds:"?", elevation:"?", poi:"?", road:"", suburb:"", city_district:"", city:"", state:"", country:"" }; }
         }
 
-        // Wykonanie pełnego zapisu
         captureBtn.addEventListener('click', async () => {
-            // Wznowienie kontekstu audio (wymagane przez przeglądarki)
             if (audioContext && audioContext.state === 'suspended') {
                 audioContext.resume();
             }
@@ -247,24 +285,30 @@
                 const isDST = date.getTimezoneOffset() < Math.max(new Date(date.getFullYear(), 0, 1).getTimezoneOffset(), new Date(date.getFullYear(), 6, 1).getTimezoneOffset());
                 const tzOffsetStr = getTimezoneOffsetString(date);
 
+                // Pełny szablon metadanych w oryginalnej formie
                 const metadata = `
 === POZYCJA ===
 GPS: ${lat.toFixed(6)}, ${lon.toFixed(6)} (Wys.: ${base.elevation} m n.p.m.)
 Google Maps: https://www.google.com/maps/search/?api=1&query=${lat},${lon}
-Punkt Orientacyjny (POI): ${base.poi}
+Punkt Orientacyjny (POI dookoła): ${base.poi}
 Ulica: ${base.road}
 Osiedle: ${base.suburb}
 Dzielnica: ${base.city_district}
 Miasto: ${base.city}
 Region/Województwo: ${base.state}
 Kraj: ${base.country}
+Część świata/Kontynent: Europa
+Planeta/Układ: Ziemia, Układ Słoneczny
 
 === CZAS ===
 Dokładna data i czas: ${date.toLocaleString('pl-PL')}
 Strefa czasowa: ${Intl.DateTimeFormat().resolvedOptions().timeZone} (${tzOffsetStr})
+Zmiana czasowa (DST): ${isDST ? "Tak (Czas letni)" : "Nie (Czas standardowy)"}
 Pora dnia: ${timeDetails.timeOfDay}
 Pora roku: ${timeDetails.season}
 Faza księżyca: ${getMoonPhase(date)}
+Znak zodiaku: ${astro.zodiacSign}
+Rok chiński: ${astro.chineseYear}
 
 === POGODA ===
 Temperatura: ${base.temp} °C
@@ -282,14 +326,12 @@ Historia wokół (1km): ${wiki}
 
                 statusDiv.innerHTML = "📸 Uśmiechnij się! Robienie zdjęcia i nagrywanie 10 sekund dźwięku otoczenia...";
                 
-                // Robienie zdjęcia
                 const canvas = document.createElement('canvas');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 canvas.getContext('2d').drawImage(video, 0, 0);
                 const photoDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
-                // Nagrywanie audio
                 audioChunks = [];
                 mediaRecorder.start();
                 setTimeout(() => {
