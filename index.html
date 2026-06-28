@@ -1,4 +1,4 @@
-```html
+
 <!DOCTYPE html>
 <html lang="pl">
 <head>
@@ -12,7 +12,7 @@
         button { background: #0ea5e9; color: white; border: none; padding: 16px 20px; font-size: 16px; font-weight: bold; border-radius: 12px; width: 100%; cursor: pointer; margin-bottom: 20px; transition: background 0.3s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         button:disabled { background: #475569; cursor: not-allowed; color: #94a3b8; }
         video { width: 100%; border-radius: 12px; margin-bottom: 10px; background: #000; border: 2px solid #1e293b; }
-        #status { padding: 15px; background: #1e293b; border-radius: 12px; font-size: 13px; white-space: pre-wrap; border-left: 4px solid #38bdf8; line-height: 1.5; height: 200px; overflow-y: auto; }
+        #status { padding: 15px; background: #1e293b; border-radius: 12px; font-size: 13px; white-space: pre-wrap; border-left: 4px solid #38bdf8; line-height: 1.5; height: 250px; overflow-y: auto; }
         .loading { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
@@ -20,7 +20,7 @@
 <body>
 
     <h2>Rejestrator Chwili</h2>
-    <p class="subtitle">Wersja Ultimate (8 API Data Sources)</p>
+    <p class="subtitle">Wersja Ultimate (Pełne Metadane + Zewnętrzne API)</p>
     
     <video id="camera" autoplay playsinline muted></video>
     <button id="captureBtn">Zarejestruj Chwilę (Zdjęcie, 10s Audio, Mega-Metadane)</button>
@@ -34,7 +34,6 @@
         let mediaRecorder;
         let audioChunks = [];
 
-        // Pomocnicza funkcja z timeoutem (aby powolne API nie zawiesiło aplikacji)
         const fetchWithTimeout = async (url, timeout = 5000) => {
             const controller = new AbortController();
             const id = setTimeout(() => controller.abort(), timeout);
@@ -55,102 +54,115 @@
             }
         }
 
-        // 2. Wikipedia (Historia w promieniu 1km)
+        // Zodiak i Rok Chiński
+        function getAstrology(date) {
+            const d = date.getDate(), m = date.getMonth() + 1, y = date.getFullYear();
+            const zodiacs = ["Koziorożec", "Wodnik", "Ryby", "Baran", "Byk", "Bliźnięta", "Rak", "Lew", "Panna", "Waga", "Skorpion", "Strzelec", "Koziorożec"];
+            const lastDays = [19, 18, 20, 19, 20, 20, 22, 22, 22, 22, 21, 21, 19];
+            const zodiacSign = d > lastDays[m-1] ? zodiacs[m] : zodiacs[m-1];
+            const chineseAnimals = ['Małpa', 'Kogut', 'Pies', 'Świnia', 'Szczur', 'Bawół', 'Tygrys', 'Królik', 'Smok', 'Wąż', 'Koń', 'Koza'];
+            return { zodiacSign, chineseYear: chineseAnimals[y % 12] };
+        }
+
+        // Faza księżyca
+        function getMoonPhase(date) {
+            const days = Math.floor((((date.getTime() - new Date(1970, 0, 7, 20, 35, 0).getTime()) / 1000) % 2551443) / 86400);
+            if(days < 1 || days > 28) return "Nów";
+            if(days < 7) return "Przybywający sierp";
+            if(days === 7) return "Pierwsza kwadra";
+            if(days < 14) return "Garbata przybywająca";
+            if(days === 14 || days === 15) return "Pełnia";
+            if(days < 22) return "Garbata ubywająca";
+            if(days === 22) return "Ostatnia kwadra";
+            return "Ubywający sierp";
+        }
+
+        // Pora roku i dnia
+        function getTimeDetails(date) {
+            const m = date.getMonth() + 1, h = date.getHours();
+            return {
+                season: m >= 3 && m <= 5 ? "Wiosna" : m >= 6 && m <= 8 ? "Lato" : m >= 9 && m <= 11 ? "Jesień" : "Zima",
+                timeOfDay: h >= 5 && h < 8 ? "Świt" : h >= 8 && h < 16 ? "Dzień" : h >= 16 && h < 20 ? "Zmierzch" : "Noc"
+            };
+        }
+
+        // Strefa czasowa (np. GMT+2)
+        function getTimezoneOffsetString(date) {
+            const offsetMinutes = date.getTimezoneOffset();
+            const sign = offsetMinutes > 0 ? '-' : '+';
+            const hours = String(Math.floor(Math.abs(offsetMinutes) / 60)).padStart(2, '0');
+            const minutes = String(Math.abs(offsetMinutes) % 60).padStart(2, '0');
+            return `GMT${sign}${hours}:${minutes}`;
+        }
+
+        // API
         async function getWiki(lat, lon) {
             try {
                 const res = await fetchWithTimeout(`https://pl.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lon}&gsradius=1000&gslimit=4&format=json&origin=*`);
                 const data = await res.json();
                 if(data.query?.geosearch?.length > 0) return data.query.geosearch.map(i => i.title).join(", ");
-                return "Brak istotnych wpisów historycznych w promieniu 1 km.";
-            } catch(e) { return "Brak danych z Wikipedii."; }
+                return "Brak danych";
+            } catch(e) { return "Brak danych"; }
         }
 
-        // 3. Pogoda kosmiczna (Burze magnetyczne)
         async function getSpaceWeather() {
             try {
                 const res = await fetchWithTimeout('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
                 const data = await res.json();
-                const latest = data[data.length - 1]; // Ostatni odczyt
-                const kp = parseFloat(latest[1]);
-                let status = kp > 4 ? "Wysoka (Możliwe zakłócenia/Zorza)" : "Spokojna";
-                return `Indeks Kp = ${kp} (${status})`;
-            } catch(e) { return "Brak łączności z serwerami NOAA."; }
+                return `Indeks Kp = ${data[data.length - 1][1]}`;
+            } catch(e) { return "Brak danych"; }
         }
 
-        // 4. Sejsmologia (Trzęsienia ziemi w promieniu 200km z ostatnich 30 dni)
         async function getEarthquake(lat, lon) {
             try {
                 let d = new Date(); d.setDate(d.getDate() - 30);
-                const dateStr = d.toISOString().split('T')[0];
-                const res = await fetchWithTimeout(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${lat}&longitude=${lon}&maxradiuskm=200&starttime=${dateStr}&limit=1`);
+                const res = await fetchWithTimeout(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${lat}&longitude=${lon}&maxradiuskm=200&starttime=${d.toISOString().split('T')[0]}&limit=1`);
                 const data = await res.json();
-                if(data.features?.length > 0) {
-                    const eq = data.features[0].properties;
-                    return `Zanotowano wstrząs: Mag ${eq.mag}, ${eq.place} (${new Date(eq.time).toLocaleDateString()})`;
-                }
-                return "Brak wstrząsów sejsmicznych w promieniu 200 km (ostatnie 30 dni).";
-            } catch(e) { return "Brak danych sejsmicznych."; }
+                if(data.features?.length > 0) return `Mag ${data.features[0].properties.mag}, ${data.features[0].properties.place}`;
+                return "Brak wstrząsów (ostatnie 30 dni)";
+            } catch(e) { return "Brak danych"; }
         }
 
-        // 5. Ruch lotniczy (Samoloty w promieniu ~30km)
         async function getFlights(lat, lon) {
             try {
-                const box = 0.3; // ok. 30 km odchylenia
+                const box = 0.3;
                 const res = await fetchWithTimeout(`https://opensky-network.org/api/states/all?lamin=${lat-box}&lomin=${lon-box}&lamax=${lat+box}&lomax=${lon+box}`);
                 const data = await res.json();
-                if(data.states?.length > 0) {
-                    return `Wykryto lotów nad głową: ${data.states.length}. Najbliższy lot: ${data.states[0][1]?.trim() || 'Prywatny/Nieznany'}.`;
-                }
-                return "Czyste niebo - brak samolotów w bezpośrednim zasięgu radaru.";
-            } catch(e) { return "Radar lotniczy chwilowo niedostępny (limit zapytań)."; }
+                return data.states?.length > 0 ? `Wykryto ${data.states.length}` : "Brak na radarze";
+            } catch(e) { return "Radar niedostępny"; }
         }
 
-        // 6. Dane Słońca (Złota/Niebieska Godzina)
         async function getSun(lat, lon) {
             try {
                 const res = await fetchWithTimeout(`https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&formatted=0`);
                 const data = await res.json();
-                const d = new Date(data.results.sunset);
-                const goldenHour = new Date(d.getTime() - 40 * 60000); // ok 40 min przed zachodem
-                return {
-                    sunset: d.toLocaleTimeString('pl-PL'),
-                    goldenHour: goldenHour.toLocaleTimeString('pl-PL'),
-                    isDay: new Date() < d && new Date() > new Date(data.results.sunrise)
-                };
-            } catch(e) { return { sunset: "?", goldenHour: "?", isDay: true }; }
+                return new Date(new Date(data.results.sunset).getTime() - 40 * 60000).toLocaleTimeString('pl-PL');
+            } catch(e) { return "Brak danych"; }
         }
 
-        // Szacowanie Skali Bortle'a na podstawie urbanizacji
-        function estimateBortle(address) {
-            if(address.city) return "7-8 (Silne zanieczyszczenie miejskie, widać tylko najjaśniejsze obiekty)";
-            if(address.town || address.suburb) return "5-6 (Niebo podmiejskie)";
-            if(address.village) return "3-4 (Wiejskie niebo, zarys Drogi Mlecznej)";
-            return "1-2 (Ciemne niebo naturalne)";
-        }
-
-        // [Tu znajdują się funkcje z poprzedniej wersji - skrócone dla czytelności]
         async function getBaseData(lat, lon) {
             try {
-                const resWeather = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,surface_pressure,wind_speed_10m&elevation=nan`);
+                const resWeather = await fetchWithTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,surface_pressure,wind_speed_10m,cloudcover&elevation=nan`);
                 const weather = await resWeather.json();
                 
-                const resAir = await fetchWithTimeout(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi`);
-                const air = await resAir.json();
-                
                 const resAddr = await fetchWithTimeout(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=18`);
-                const addrData = await resAddr.json();
-                const addr = addrData.address || {};
-                const poi = addr.park || addr.leisure || addr.historic || addr.tourism || addr.amenity || 'Brak danych w promieniu kilkudziesięciu metrów';
+                const addr = (await resAddr.json()).address || {};
 
                 return {
                     temp: weather.current?.temperature_2m || "?", 
                     pressure: weather.current?.surface_pressure || "?",
+                    wind: weather.current?.wind_speed_10m || "?",
+                    clouds: weather.current?.cloudcover || "?",
                     elevation: weather.elevation || "?",
-                    aqi: air.current?.european_aqi || "?",
-                    poi: poi,
-                    road: addr.road || '', city: addr.city || addr.town || addr.village || '', addressRaw: addr
+                    poi: addr.park || addr.leisure || addr.historic || addr.tourism || addr.amenity || 'Brak danych',
+                    road: addr.road || '',
+                    suburb: addr.suburb || addr.neighbourhood || '',
+                    city_district: addr.city_district || addr.borough || '',
+                    city: addr.city || addr.town || addr.village || '',
+                    state: addr.state || '',
+                    country: addr.country || ''
                 };
-            } catch(e) { return { temp:"?", pressure:"?", elevation:"?", aqi:"?", poi:"?", road:"", city:"", addressRaw:{} }; }
+            } catch(e) { return { temp:"?", pressure:"?", wind:"?", clouds:"?", elevation:"?", poi:"?", road:"", suburb:"", city_district:"", city:"", state:"", country:"" }; }
         }
 
         // Wykonanie pełnego zapisu
@@ -164,47 +176,55 @@
                 const lon = pos.coords.longitude;
                 const date = new Date();
                 
-                statusDiv.innerHTML = "🌍 Lokalizacja znaleziona.<br>🛰️ Odpytywanie 8 globalnych baz danych (Słońce, NOAA, Radar, Wiki)...";
+                statusDiv.innerHTML = "🌍 Lokalizacja znaleziona.<br>🛰️ Odpytywanie baz danych (Słońce, NOAA, Radar, Wiki, Meteo)...";
                 
-                // Odpytywanie równoległe wszystkich API (maksymalna wydajność)
-                const [base, wiki, space, eq, flights, sun] = await Promise.all([
-                    getBaseData(lat, lon),
-                    getWiki(lat, lon),
-                    getSpaceWeather(),
-                    getEarthquake(lat, lon),
-                    getFlights(lat, lon),
-                    getSun(lat, lon)
+                const [base, wiki, space, eq, flights, goldenHour] = await Promise.all([
+                    getBaseData(lat, lon), getWiki(lat, lon), getSpaceWeather(),
+                    getEarthquake(lat, lon), getFlights(lat, lon), getSun(lat, lon)
                 ]);
 
-                // Formatowanie metadanych
+                const astro = getAstrology(date);
+                const timeDetails = getTimeDetails(date);
+                const isDST = date.getTimezoneOffset() < Math.max(new Date(date.getFullYear(), 0, 1).getTimezoneOffset(), new Date(date.getFullYear(), 6, 1).getTimezoneOffset());
+                const tzOffsetStr = getTimezoneOffsetString(date);
+
+                // Formatowanie metadanych - KOMPLETNE
                 const metadata = `
-=============================================
-             ZAREJESTROWANA CHWILA
-=============================================
-
-=== 📍 POZYCJA I KONTEKST ===
-GPS: ${lat.toFixed(6)}, ${lon.toFixed(6)} (Wysokość: ${base.elevation} m n.p.m.)
-Adres: ${base.road}, ${base.city}
+=== POZYCJA ===
+GPS: ${lat.toFixed(6)}, ${lon.toFixed(6)} (Wys.: ${base.elevation} m n.p.m.)
+Google Maps: https://www.google.com/maps/search/?api=1&query=${lat},${lon}
 Punkt Orientacyjny (POI): ${base.poi}
-Historia wokół (1km): ${wiki}
-Mapy Google: https://www.google.com/maps/search/?api=1&query=${lat},${lon}
+Ulica: ${base.road}
+Osiedle: ${base.suburb}
+Dzielnica: ${base.city_district}
+Miasto: ${base.city}
+Region/Województwo: ${base.state}
+Kraj: ${base.country}
+Część świata/Kontynent: Europa
+Planeta/Układ: Ziemia, Układ Słoneczny
 
-=== ⏱️ CZAS I ASTRONOMIA ===
-Data i czas lokalny: ${date.toLocaleString('pl-PL')}
-Pora dnia: ${sun.isDay ? 'Dzień' : 'Noc'} (Zachód słońca: ${sun.sunset})
-Złota Godzina dla fotografii (idealne światło): ${sun.goldenHour}
-Zanieczyszczenie światłem (Estymata Bortle'a): ${estimateBortle(base.addressRaw)}
+=== CZAS ===
+Dokładna data i czas: ${date.toLocaleString('pl-PL')}
+Strefa czasowa: ${Intl.DateTimeFormat().resolvedOptions().timeZone} (${tzOffsetStr})
+Zmiana czasowa (DST): ${isDST ? "Tak (Czas letni)" : "Nie (Czas standardowy)"}
+Pora dnia: ${timeDetails.timeOfDay}
+Pora roku: ${timeDetails.season}
+Faza księżyca: ${getMoonPhase(date)}
+Znak zodiaku: ${astro.zodiacSign}
+Rok chiński: ${astro.chineseYear}
 
-=== 🌍 ŚRODOWISKO I KLIMAT ===
+=== POGODA ===
 Temperatura: ${base.temp} °C
-Ciśnienie barometryczne: ${base.pressure} hPa
-Jakość powietrza (Indeks AQI): ${base.aqi} (Mniejsze = lepsze)
+Ciśnienie: ${base.pressure} hPa
+Wiatr: ${base.wind} km/h
+Zachmurzenie: ${base.clouds}%
 
-=== 🚀 AKTYWNOŚĆ ZIEMI I KOSMOSU ===
+=== KONTEKST ZEWNĘTRZNY ===
+Złota Godzina: ${goldenHour}
 Ruch lotniczy nad głową: ${flights}
-Pogoda Kosmiczna (Burze słoneczne): ${space}
-Aktywność sejsmiczna: ${eq}
-=============================================
+Kosmos (Burze magnetyczne): ${space}
+Sejsmologia (<200km, 30 dni): ${eq}
+Historia wokół (1km): ${wiki}
                 `.trim();
 
                 statusDiv.innerHTML = "📸 Uśmiechnij się! Robienie zdjęcia i nagrywanie 10 sekund dźwięku otoczenia...";
@@ -224,12 +244,12 @@ Aktywność sejsmiczna: ${eq}
                     mediaRecorder.onstop = () => {
                         const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                         
-                        // Pobieranie plików do przeglądarki
+                        // Pobieranie
                         downloadFile(photoDataUrl, `Chwila_Foto_${date.getTime()}.jpg`);
                         downloadFile(URL.createObjectURL(audioBlob), `Chwila_Audio_${date.getTime()}.webm`);
                         downloadFile('data:text/plain;charset=utf-8,' + encodeURIComponent(metadata), `Chwila_Metadane_${date.getTime()}.txt`);
                         
-                        statusDiv.innerText = "✅ Gotowe! Pliki zostały zapisane na urządzeniu.\n\n" + metadata;
+                        statusDiv.innerText = "✅ Gotowe! Pliki zapisane.\n\n" + metadata;
                         captureBtn.disabled = false;
                         captureBtn.classList.remove('loading');
                         captureBtn.innerText = "Zarejestruj kolejną chwilę";
@@ -237,7 +257,7 @@ Aktywność sejsmiczna: ${eq}
                 }, 10000);
 
             }, (err) => {
-                statusDiv.innerText = "❌ Błąd GPS: Musisz włączyć lokalizację w telefonie i przyznać uprawnienia przeglądarce.";
+                statusDiv.innerText = "❌ Błąd GPS: Brak lokalizacji.";
                 captureBtn.disabled = false;
                 captureBtn.classList.remove('loading');
             }, { enableHighAccuracy: true });
@@ -258,4 +278,3 @@ Aktywność sejsmiczna: ${eq}
 </html>
 
 
-```
