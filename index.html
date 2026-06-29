@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#060E0A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chwila">
+<link rel="manifest" href="manifest.json">
+<title>GeoPhotoAudio — Rejestrator Chwili</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060E0A;--panel:#0C1912;--border:#163022;
+  --accent:#245D3C;--accentLt:#38A060;--accentDim:#1A4A2E;
+  --amber:#F5A623;--red:#E53935;--redGlow:rgba(229,57,53,.22);
+  --text:#AECAA6;--textDim:#446050;--data:#72C080;--white:#E2EBD8;
+  --mono:'Space Mono','Courier New',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px}
+body{display:flex;flex-direction:column;max-width:480px;margin:0 auto;min-height:100vh}
+
+/* ── STATUS BAR ── */
+#statusBar{background:var(--panel);border-bottom:1px solid var(--border);padding:6px 14px;display:flex;justify-content:space-between;align-items:center;font-size:10px;letter-spacing:1px;flex-shrink:0}
+#clock{color:var(--white);font-size:15px;letter-spacing:3px;font-weight:700}
+.onlineDot{color:var(--accentLt)}
+.offlineDot{color:var(--red)}
+#gpsIndicator{color:var(--textDim)}
+#gpsIndicator.ok{color:var(--accentLt)}
+#gpsIndicator.loading{color:var(--amber)}
+#gpsIndicator.error{color:var(--red)}
+
+/* ── ERROR STRIP ── */
+#errStrip{background:rgba(229,57,53,.1);border-bottom:1px solid rgba(229,57,53,.3);padding:0;max-height:0;overflow:hidden;transition:max-height .3s}
+#errStrip.visible{max-height:200px;padding:8px 14px}
+.errLine{font-size:10px;color:var(--red);line-height:1.8;display:flex;justify-content:space-between}
+.errLine button{background:none;border:none;color:var(--red);cursor:pointer;padding:0 4px}
+
+/* ── TABS ── */
+#tabs{display:flex;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--textDim);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:1px;transition:color .15s,border-color .15s}
+.tab.active{color:var(--accentLt);border-bottom-color:var(--accentLt)}
+
+/* ── SCROLL AREA ── */
+.tabContent{display:none;flex:1;overflow-y:auto;padding:14px;padding-bottom:20px}
+.tabContent.active{display:block}
+
+/* ── CARDS ── */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
+.cardLbl{color:var(--textDim);font-size:8px;letter-spacing:2px;margin-bottom:8px}
+
+/* ── CAMERA ── */
+#camera{width:100%;border-radius:8px;background:#000;border:1px solid var(--border);display:block;margin-bottom:10px;max-height:220px;object-fit:cover}
+
+/* ── CANVAS / VU ── */
+#spectrogram{width:100%;height:80px;border-radius:8px;background:#000;border:1px solid var(--border);display:block;margin-bottom:10px}
+#vuBar{display:flex;align-items:flex-end;justify-content:center;gap:2px;height:50px;margin-bottom:10px}
+.vuBin{width:11px;border-radius:2px 2px 0 0;transition:height .04s,background .08s}
+
+/* ── GAIN ── */
+.gainRow{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px}
+#gainVal{color:var(--amber);font-weight:700}
+input[type=range]{width:100%;accent-color:var(--accentLt);cursor:pointer;margin-bottom:6px}
+
+/* ── DURATION SELECTOR ── */
+.durBtns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.durBtn{flex:1;min-width:44px;padding:7px 4px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--textDim);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:1px;text-align:center;transition:all .15s}
+.durBtn.sel{border-color:var(--accent);color:var(--accentLt);background:rgba(36,93,60,.2)}
+
+/* ── BIG REC BUTTON ── */
+#recWrap{display:flex;flex-direction:column;align-items:center;margin-bottom:12px}
+#recBtn{width:96px;height:96px;border-radius:50%;border:3px solid var(--accent);background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;margin-bottom:10px}
+#recBtn.recording{border-color:var(--red);background:rgba(229,57,53,.1);box-shadow:0 0 36px var(--redGlow),0 0 10px var(--redGlow)}
+#recBtn .dot{width:36px;height:36px;background:var(--red);border-radius:50%;transition:all .2s}
+#recBtn.recording .dot{border-radius:5px;width:26px;height:26px}
+#recTimer{font-size:24px;color:var(--red);letter-spacing:4px;height:30px;display:flex;align-items:center;justify-content:center}
+#recHint{font-size:10px;color:var(--textDim);letter-spacing:2px;height:16px;text-align:center}
+
+/* ── GPS BUTTON ── */
+#locBtn{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--textDim);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:1px;margin-bottom:10px;transition:all .2s}
+#locBtn.ok{border-color:var(--accent);color:var(--accentLt)}
+#locBtn.loading{color:var(--amber)}
+
+/* ── DATA GRIDS ── */
+.dg{display:grid;gap:8px;margin-top:6px}
+.dg2{grid-template-columns:1fr 1fr}
+.dg3{grid-template-columns:1fr 1fr 1fr}
+.dk{color:var(--textDim);font-size:8px;letter-spacing:1px}
+.dv{color:var(--data);font-size:12px;font-weight:700}
+
+/* ── METADATA FORM ── */
+.mfField{margin-bottom:8px}
+.mfField input,.mfField textarea{
+  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  padding:6px 8px;color:var(--white);font-family:var(--mono);font-size:11px;
+  outline:none;resize:vertical
+}
+
+/* ── STATUS LOG ── */
+#log{font-size:10px;color:var(--textDim);white-space:pre-wrap;line-height:1.8;max-height:120px;overflow-y:auto}
+#log span{display:block}
+#log span.ok{color:var(--accentLt)}
+#log span.err{color:var(--red)}
+#log span.warn{color:var(--amber)}
+#log span.info{color:var(--text)}
+
+/* ── ARCHIVE ── */
+.recCard{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px}
+.recCard h3{color:var(--white);font-size:11px;margin-bottom:4px}
+.recMeta{font-size:9px;color:var(--textDim);line-height:1.9}
+.recButtons{display:flex;gap:6px;margin-top:10px}
+.recButtons button{flex:1;padding:6px;background:transparent;border-radius:5px;cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:1px}
+.btnAudio{border:1px solid var(--accent);color:var(--accentLt)}
+.btnPhoto{border:1px solid var(--accentDim);color:var(--data)}
+.btnJson{border:1px solid var(--border);color:var(--textDim)}
+.recAudio{width:100%;margin-top:8px;border-radius:4px;height:28px}
+.recPhoto{width:100%;border-radius:6px;margin-top:8px;max-height:160px;object-fit:cover;display:none}
+.recPhoto.visible{display:block}
+.emptyArchive{text-align:center;color:var(--textDim);padding:52px 0;font-size:12px;line-height:2.2}
+
+/* ── AUDIO PROGRESS ── */
+.progress{height:2px;background:var(--border);border-radius:1px;margin-top:6px;display:none}
+.progressInner{height:100%;background:var(--accentLt);border-radius:1px;width:0;transition:width .3s}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* ════════════════════════════════════════════════════
+   ── METAWARSTWA NEWSOWA — nowe style ──
+   ════════════════════════════════════════════════════ */
+
+/* Przycisk niezależnego pobierania newsów */
+#newsBtn{
+  width:100%;padding:9px;background:transparent;
+  border:1px solid var(--border);border-radius:6px;
+  color:var(--textDim);cursor:pointer;font-family:var(--mono);
+  font-size:9px;letter-spacing:1px;margin-bottom:10px;transition:all .2s
+}
+#newsBtn.loading{color:var(--amber);border-color:var(--amber)}
+#newsBtn.ok{border-color:var(--accent);color:var(--accentLt)}
+
+/* Karta newsów */
+#newsCard{display:none}
+#newsCard .cardLbl{
+  color:var(--textDim);font-size:8px;letter-spacing:2px;margin-bottom:10px;
+  display:flex;justify-content:space-between;align-items:center
+}
+#newsCard .cardLbl span{color:var(--textDim);font-size:7px}
+
+/* Sekcje geograficzne */
+.newsSect{margin-bottom:13px}
+.newsSect:last-child{margin-bottom:0}
+
+.newsCatHdr{
+  display:flex;align-items:center;gap:6px;
+  margin-bottom:7px;padding-bottom:5px;
+  border-bottom:1px solid var(--border)
+}
+.newsCatEmoji{font-size:13px;line-height:1}
+.newsCatLabel{color:var(--accentLt);font-size:8px;letter-spacing:2px;font-weight:700}
+.newsCatSrc{margin-left:auto;color:var(--textDim);font-size:7px;letter-spacing:.5px}
+
+/* Pojedynczy news */
+.newsItem{
+  padding:5px 0 5px 8px;
+  border-left:2px solid var(--border);
+  margin-bottom:5px;
+  transition:border-color .15s
+}
+.newsItem:hover{border-left-color:var(--accentLt)}
+.newsItem:last-child{margin-bottom:0}
+
+.newsTitle{
+  color:var(--white);font-size:10px;line-height:1.5;
+  cursor:pointer;margin-bottom:3px
+}
+.newsTitle:hover{color:var(--accentLt)}
+
+.newsMeta{
+  display:flex;gap:8px;
+  color:var(--textDim);font-size:8px;letter-spacing:.3px
+}
+.newsMeta .newsAgo{color:var(--data)}
+
+/* Stan ładowania */
+.newsSpinner{
+  text-align:center;color:var(--amber);
+  font-size:10px;padding:14px 0;
+  letter-spacing:2px;
+  animation:newsBlip 1.1s ease-in-out infinite
+}
+@keyframes newsBlip{0%,100%{opacity:.3}50%{opacity:1}}
+
+/* Błąd pojedynczej sekcji */
+.newsErr{color:var(--red);font-size:9px;padding:4px 0 4px 8px;border-left:2px solid var(--red)}
+
+/* Przycisk odświeżania wewnątrz karty */
+.newsRefreshRow{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-top:10px;padding-top:8px;border-top:1px solid var(--border)
+}
+.newsRefreshRow span{color:var(--textDim);font-size:7px;letter-spacing:.5px}
+#newsInlineRefresh{
+  background:transparent;border:1px solid var(--border);border-radius:4px;
+  color:var(--textDim);cursor:pointer;font-family:var(--mono);
+  font-size:8px;letter-spacing:1px;padding:4px 8px;
+  transition:all .15s
+}
+#newsInlineRefresh:hover{border-color:var(--accent);color:var(--accentLt)}
+
+/* ── METADATA-ONLY BUTTON ── */
+#metaOnlyBtn{width:100%;padding:9px;background:transparent;border:1px dashed var(--border);border-radius:6px;color:var(--textDim);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:1px;margin-bottom:10px;transition:all .2s}
+#metaOnlyBtn:hover{border-color:var(--accent);color:var(--accentLt)}
+#metaOnlyBtn.saved{border-color:var(--accentLt);color:var(--accentLt)}
+
+/* ── GOOGLE DRIVE ── */
+#gdAuthBtn{width:100%;padding:9px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--textDim);cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:1px;margin-top:6px;transition:all .2s}
+#gdAuthBtn.ok{border-color:var(--accent);color:var(--accentLt)}
+.btnDrive{border:1px solid #3a6b9e !important;color:#6ba3d6 !important}
+.recTag{display:inline-block;font-size:7px;letter-spacing:1px;padding:2px 6px;border-radius:3px;margin-bottom:6px;border:1px solid}
+.recTag.meta{background:rgba(245,166,35,.08);color:var(--amber);border-color:rgba(245,166,35,.25)}
+.gdHint{font-size:9px;color:var(--textDim);line-height:1.7;margin-bottom:8px}
+.gdHint a{color:var(--accentLt)}
+</style>
+</head>
+<body>
+
+<!-- STATUS BAR -->
+<div id="statusBar">
+  <span id="netStatus" class="onlineDot">◉ ONLINE</span>
+  <span id="clock">00:00:00</span>
+  <span id="gpsIndicator">GPS ○</span>
+</div>
+
+<!-- ERROR STRIP -->
+<div id="errStrip"></div>
+
+<!-- TABS -->
+<div id="tabs">
+  <button class="tab active" data-tab="rec">● REC</button>
+  <button class="tab" data-tab="archive">◈ ARCHIWUM <span id="arcCount"></span></button>
+  <button class="tab" data-tab="settings">⚙ USTAWIENIA</button>
+</div>
+
+<!-- ══════════════════ REC ══════════════════ -->
+<div id="tab-rec" class="tabContent active">
+
+  <video id="camera" autoplay playsinline muted></video>
+  <canvas id="spectrogram" width="600" height="80"></canvas>
+
+  <!-- VU -->
+  <div id="vuBar"></div>
+
+  <!-- Gain -->
+  <div class="card">
+    <div class="cardLbl">WZMOCNIENIE MIKROFONU (GAIN)</div>
+    <div class="gainRow"><span>Gain</span><span id="gainVal">3.0×</span></div>
+    <input type="range" id="gainCtrl" min="1" max="10" step="0.5" value="3.0">
+  </div>
+
+  <!-- Duration -->
+  <div class="card">
+    <div class="cardLbl">CZAS NAGRYWANIA</div>
+    <div class="durBtns">
+      <button class="durBtn" data-dur="5">5s</button>
+      <button class="durBtn" data-dur="10">10s</button>
+      <button class="durBtn" data-dur="30">30s</button>
+      <button class="durBtn" data-dur="60">60s</button>
+      <button class="durBtn" data-dur="120">2min</button>
+      <button class="durBtn sel" data-dur="0">RĘCZ.</button>
+    </div>
+  </div>
+
+  <!-- Record button -->
+  <div id="recWrap">
+    <button id="recBtn"><div class="dot"></div></button>
+    <div id="recTimer"></div>
+    <div id="recHint">NACIŚNIJ ABY NAGRAĆ</div>
+  </div>
+
+  <!-- GPS -->
+  <button id="locBtn">○ POBIERZ LOKALIZACJĘ + POGODĘ + DANE KONTEKSTOWE</button>
+  <button id="metaOnlyBtn">💾 ZAPISZ METADANE (BEZ NAGRANIA)</button>
+
+  <!-- Location card -->
+  <div class="card" id="locCard" style="display:none">
+    <div class="cardLbl">LOKALIZACJA</div>
+    <div id="locName" style="color:var(--white);font-size:11px;margin-bottom:8px;line-height:1.5"></div>
+    <div class="dg dg2" id="locGrid"></div>
+    <div id="sunMoon" style="margin-top:10px;font-size:10px;color:var(--textDim);display:flex;gap:10px;flex-wrap:wrap"></div>
+  </div>
+
+  <!-- Weather card -->
+  <div class="card" id="wxCard" style="display:none">
+    <div class="cardLbl">WARUNKI ATMOSFERYCZNE</div>
+    <div class="dg dg3" id="wxGrid"></div>
+  </div>
+
+  <!-- Extra data card -->
+  <div class="card" id="extCard" style="display:none">
+    <div class="cardLbl">DANE KONTEKSTOWE</div>
+    <div id="extGrid" style="font-size:10px;color:var(--textDim);line-height:2"></div>
+  </div>
+
+  <!-- ════ METAWARSTWA NEWSOWA ════ -->
+  <!--
+    Przycisk działa NIEZALEŻNIE od GPS — wiadomości można pobrać
+    bez lokalizacji, jako autonomiczna warstwa kontekstu czasowego.
+    Po kliknięciu "POBIERZ LOKALIZACJĘ..." newsy są pobierane razem
+    z innymi danymi (w Promise.allSettled).
+  -->
+  <button id="newsBtn">📰 POBIERZ AKTUALNOŚCI — POLSKA · EUROPA · ŚWIAT</button>
+
+  <!-- Karta z metawarstwą wiadomości -->
+  <div class="card" id="newsCard">
+    <div class="cardLbl">
+      METAWARSTWA — CZYM ŻYJE POLSKA · EUROPA · ŚWIAT
+      <span id="newsTimestamp"></span>
+    </div>
+    <div id="newsGrid">
+      <div class="newsSpinner">◌ ŁADOWANIE AKTUALNOŚCI...</div>
+    </div>
+    <div class="newsRefreshRow">
+      <span id="newsFetchedAt"></span>
+      <button id="newsInlineRefresh">↺ ODŚWIEŻ</button>
+    </div>
+  </div>
+  <!-- ════════════════════════════ -->
+
+  <!-- Log -->
+  <div class="card">
+    <div class="cardLbl">STATUS</div>
+    <div id="log"><span class="info">Gotowy. Pobierz lokalizację i naciśnij REC.</span></div>
+  </div>
+
+</div>
+
+<!-- ══════════════════ ARCHIVE ══════════════════ -->
+<div id="tab-archive" class="tabContent">
+  <div class="cardLbl" style="margin-bottom:14px" id="arcHeader">ARCHIWUM SESJI — 0 NAGRAŃ</div>
+  <div id="arcList">
+    <div class="emptyArchive">Brak nagrań.<br><span style="font-size:10px">Przejdź do ● REC i zacznij rejestrację.</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════ SETTINGS ══════════════════ -->
+<div id="tab-settings" class="tabContent">
+  <div class="card">
+    <div class="cardLbl">METADANE SESJI</div>
+    <div style="margin-top:8px">
+      <div class="mfField"><div class="cardLbl">REALIZATOR</div><input id="mfRecordist" placeholder="Jan Kowalski"></div>
+      <div class="mfField"><div class="cardLbl">PROJEKT / KOLEKCJA</div><input id="mfProject" placeholder="Puszcza Białowieska 2025"></div>
+      <div class="mfField"><div class="cardLbl">SIEDLISKO / HABITAT</div><input id="mfHabitat" placeholder="las mieszany, brzeg rzeki..."></div>
+      <div class="mfField"><div class="cardLbl">NOTATKI</div><textarea id="mfNotes" rows="4" placeholder="Obserwacje, gatunki, warunki akustyczne..."></textarea></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="cardLbl">SPRZĘT</div>
+    <div style="margin-top:8px">
+      <div class="mfField"><div class="cardLbl">MIKROFON / REJESTRATOR</div><input id="mfMic" placeholder="Wbudowany / Zoom H5 / itd."></div>
+      <div class="mfField"><div class="cardLbl">URZĄDZENIE</div><input id="mfDevice" placeholder="auto-wykryty" readonly style="color:var(--textDim)"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="cardLbl">GOOGLE DRIVE — EKSPORT METADANYCH</div>
+    <div class="gdHint" style="margin-top:8px">
+      1. <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> → APIs &amp; Services → Credentials<br>
+      2. Utwórz OAuth2 Client ID (typ: Web App)<br>
+      3. Dodaj domenę GitHub Pages do Authorized JS Origins<br>
+      4. ID folderu znajdziesz w URL: <span style="color:var(--data)">drive.google.com/drive/folders/<u>ID</u></span>
+    </div>
+    <div class="mfField"><div class="cardLbl">OAUTH2 CLIENT ID</div><input id="gdClientId" placeholder="xxxx.apps.googleusercontent.com" autocomplete="off"></div>
+    <div class="mfField"><div class="cardLbl">ID FOLDERU DOCELOWEGO</div><input id="gdFolderId" placeholder="np. 1BxiMVs0XRA5nFMdKvBdBZjgm..." autocomplete="off"></div>
+    <button id="gdAuthBtn">◉ ZALOGUJ / AUTORYZUJ GOOGLE DRIVE</button>
+    <div id="gdStatus" style="font-size:9px;color:var(--textDim);margin-top:6px;text-align:center;min-height:14px"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ─── State ──────────────────────────────────────────────────────────────────
+let mediaStream = null;
+let audioCtx = null;
+let gainNode = null;
+let analyser = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let recTimerInterval = null;
+let recSeconds = 0;
+let recDuration = 0;
+let locationData = null;
+let weatherData = null;
+let extData = null;
+let newsData = null;        // ← nowe: przechowuje ostatnie nagłówki
+let recordings = [];
+let vuAnimId = null;
+let spectroAnimId = null;
+
+// ─── DOM ────────────────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const camera=$('camera'),spectCvs=$('spectrogram'),spectCtx=spectCvs.getContext('2d',{willReadFrequently:true});
+const vuBar=$('vuBar'),recBtn=$('recBtn'),recTimer=$('recTimer'),recHint=$('recHint');
+const gainCtrl=$('gainCtrl'),gainVal=$('gainVal');
+const locBtn=$('locBtn'),locCard=$('locCard'),locName=$('locName'),locGrid=$('locGrid');
+const sunMoon=$('sunMoon'),wxCard=$('wxCard'),wxGrid=$('wxGrid'),extCard=$('extCard'),extGrid=$('extGrid');
+const log=$('log'),arcList=$('arcList'),arcHeader=$('arcHeader'),arcCount=$('arcCount');
+const newsCard=$('newsCard'),newsGrid=$('newsGrid'),newsBtn=$('newsBtn');
+
+// ─── VU bins init ───────────────────────────────────────────────────────────
+const N_VU=26;
+const vuBins=[];
+for(let i=0;i<N_VU;i++){const d=document.createElement('div');d.className='vuBin';d.style.height='3px';d.style.background='var(--border)';vuBar.appendChild(d);vuBins.push(d);}
+
+// ─── Clock ──────────────────────────────────────────────────────────────────
+function updateClock(){
+  const d=new Date();
+  $('clock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');
+}
+updateClock();setInterval(updateClock,1000);
+
+// ─── Online/offline ─────────────────────────────────────────────────────────
+function updateNet(){const on=navigator.onLine;$('netStatus').textContent=on?'◉ ONLINE':'○ OFFLINE';$('netStatus').className=on?'onlineDot':'offlineDot';}
+updateNet();window.addEventListener('online',updateNet);window.addEventListener('offline',updateNet);
+
+// ─── Device info ────────────────────────────────────────────────────────────
+$('mfDevice').value=navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.split(';')[0]||navigator.platform||'Nieznane';
+
+// ─── Tabs ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tabContent').forEach(c=>c.classList.remove('active'));
+    btn.classList.add('active');
+    $('tab-'+btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ─── Duration selector ──────────────────────────────────────────────────────
+document.querySelectorAll('.durBtn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.durBtn').forEach(b=>b.classList.remove('sel'));
+    btn.classList.add('sel');
+    recDuration=parseInt(btn.dataset.dur)||0;
+    recHint.textContent=recDuration?`TRYB AUTO ${recDuration}s | NACIŚNIJ ABY NAGRAĆ`:'TRYB RĘCZNY | NACIŚNIJ ABY NAGRAĆ';
+  });
+});
+
+// ─── Error messages ─────────────────────────────────────────────────────────
+function showErr(msg){
+  const strip=$('errStrip');
+  const div=document.createElement('div');
+  div.className='errLine';
+  div.innerHTML=`<span>⚠ ${msg}</span><button onclick="this.parentElement.remove();if(!document.querySelector('#errStrip .errLine'))document.getElementById('errStrip').classList.remove('visible')">✕</button>`;
+  strip.appendChild(div);
+  strip.classList.add('visible');
+}
+
+// ─── Logger ─────────────────────────────────────────────────────────────────
+function logMsg(msg,cls='info'){
+  const s=document.createElement('span');
+  s.className=cls;s.textContent=msg;
+  log.appendChild(s);
+  log.scrollTop=log.scrollHeight;
+  if(log.children.length>30)log.removeChild(log.firstChild);
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+const pad=(n,w=2)=>String(Math.floor(n||0)).padStart(w,'0');
+const fmtDur=s=>`${pad(Math.floor(s/60))}:${pad(s%60)}`;
+const fmtSz=b=>b<1048576?`${(b/1024).toFixed(1)} KB`:`${(b/1048576).toFixed(1)} MB`;
+const fetchT=async(url,t=6000)=>{const c=new AbortController();const id=setTimeout(()=>c.abort(),t);try{const r=await fetch(url,{signal:c.signal});return r;}finally{clearTimeout(id);}};
+
+function wDir(d){return['N','NE','E','SE','S','SW','W','NW'][Math.round(d/45)%8];}
+
+function moonPhase(date=new Date()){
+  const cycle=29.530588,phase=((((date-new Date('2000-01-06T18:14:00Z'))/86400000)%cycle)+cycle)%cycle;
+  const i=Math.floor(phase/cycle*8);
+  return{emoji:['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'][i],name:['Nów','Sierp wsch.','I kwadra','Gib. wsch.','Pełnia','Gib. zach.','III kwadra','Sierp zach.'][i],pct:Math.round(phase/cycle*100)};
+}
+
+function sunTimes(lat,lng,date=new Date()){
+  const R=Math.PI/180,doy=Math.floor((date-new Date(date.getFullYear(),0,0))/86400000);
+  const B=(360/365*(doy-81))*R,decl=23.45*Math.sin(B)*R,cosH=-Math.tan(lat*R)*Math.tan(decl);
+  if(Math.abs(cosH)>1)return null;
+  const H=Math.acos(cosH)/R,eot=(9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B))/60,off=lng/15;
+  const fmt=h=>`${pad(Math.floor(h)%24)}:${pad((h%1)*60)}`;
+  return{sunrise:fmt(12-H/15-eot+off),sunset:fmt(12+H/15-eot+off)};
+}
+
+function getTimeDetails(date){
+  const m=date.getMonth()+1,h=date.getHours();
+  return{
+    season:m>=3&&m<=5?'Wiosna':m>=6&&m<=8?'Lato':m>=9&&m<=11?'Jesień':'Zima',
+    timeOfDay:h>=5&&h<8?'Świt':h>=8&&h<16?'Dzień':h>=16&&h<20?'Zmierzch':'Noc'
+  };
+}
+
+// ─── Geopolityka i adres ──────────────────────────────────────────────────────
+const CONTINENT_MAP={
+  pl:'Europa Środkowa',de:'Europa Środkowa',cz:'Europa Środkowa',sk:'Europa Środkowa',
+  at:'Europa Środkowa',ch:'Europa Środkowa',hu:'Europa Środkowa',
+  fr:'Europa Zachodnia',gb:'Europa Zachodnia',ie:'Europa Zachodnia',be:'Europa Zachodnia',
+  nl:'Europa Zachodnia',lu:'Europa Zachodnia',
+  es:'Europa Południowa',pt:'Europa Południowa',it:'Europa Południowa',gr:'Europa Południowa',
+  hr:'Europa Południowa',si:'Europa Południowa',rs:'Europa Południowa',ba:'Europa Południowa',
+  me:'Europa Południowa',mk:'Europa Południowa',al:'Europa Południowa',
+  se:'Europa Północna',no:'Europa Północna',fi:'Europa Północna',dk:'Europa Północna',
+  ee:'Europa Północna',lv:'Europa Północna',lt:'Europa Północna',is:'Europa Północna',
+  ru:'Europa Wschodnia',ua:'Europa Wschodnia',by:'Europa Wschodnia',md:'Europa Wschodnia',
+  ro:'Europa Wschodnia',bg:'Europa Wschodnia',
+  us:'Ameryka Północna',ca:'Ameryka Północna',mx:'Ameryka Środkowa',
+  br:'Ameryka Południowa',ar:'Ameryka Południowa',cl:'Ameryka Południowa',co:'Ameryka Południowa',
+  cn:'Azja Wschodnia',jp:'Azja Wschodnia',kr:'Azja Wschodnia',tw:'Azja Wschodnia',
+  in:'Azja Południowa',pk:'Azja Południowa',bd:'Azja Południowa',
+  tr:'Bliski Wschód',sa:'Bliski Wschód',ae:'Bliski Wschód',il:'Bliski Wschód',ir:'Bliski Wschód',
+  id:'Azja Pd.-Wsch.',th:'Azja Pd.-Wsch.',vn:'Azja Pd.-Wsch.',sg:'Azja Pd.-Wsch.',
+  za:'Afryka Południowa',ng:'Afryka Zachodnia',eg:'Afryka Północna',ke:'Afryka Wschodnia',
+  au:'Oceania',nz:'Oceania'
+};
+function getContinentRegion(cc){return CONTINENT_MAP[(cc||'').toLowerCase()]||null;}
+
+function parseAddress(raw){
+  const cc=(raw.country_code||'').toUpperCase();
+  return{
+    neighbourhood: raw.neighbourhood||raw.quarter||null,
+    suburb:        raw.suburb||null,
+    district:      raw.district||raw.city_district||raw.borough||null,
+    city:          raw.city||raw.town||raw.village||raw.hamlet||null,
+    county:        raw.county||raw.municipality||null,
+    region:        raw.state||raw.region||null,
+    country:       raw.country||null,
+    country_code:  cc||null,
+    continent_region: getContinentRegion(raw.country_code)
+  };
+}
+
+// ─── Zodiak i rok chiński ─────────────────────────────────────────────────────
+function zodiacSign(date=new Date()){
+  const m=date.getMonth()+1,d=date.getDate();
+  if((m===12&&d>=22)||(m===1&&d<=19))  return{name:'Koziorożec',symbol:'♑'};
+  if(m===1||(m===2&&d<=18))             return{name:'Wodnik',    symbol:'♒'};
+  if(m===2||(m===3&&d<=20))             return{name:'Ryby',      symbol:'♓'};
+  if(m===3||(m===4&&d<=19))             return{name:'Baran',     symbol:'♈'};
+  if(m===4||(m===5&&d<=20))             return{name:'Byk',       symbol:'♉'};
+  if(m===5||(m===6&&d<=20))             return{name:'Bliźnięta', symbol:'♊'};
+  if(m===6||(m===7&&d<=22))             return{name:'Rak',       symbol:'♋'};
+  if(m===7||(m===8&&d<=22))             return{name:'Lew',       symbol:'♌'};
+  if(m===8||(m===9&&d<=22))             return{name:'Panna',     symbol:'♍'};
+  if(m===9||(m===10&&d<=22))            return{name:'Waga',      symbol:'♎'};
+  if(m===10||(m===11&&d<=21))           return{name:'Skorpion',  symbol:'♏'};
+  return                                       {name:'Strzelec',  symbol:'♐'};
+}
+
+function chineseYear(date=new Date()){
+  const A=[{n:'Szczur',e:'🐀'},{n:'Wół',e:'🐂'},{n:'Tygrys',e:'🐯'},{n:'Królik',e:'🐇'},
+    {n:'Smok',e:'🐉'},{n:'Wąż',e:'🐍'},{n:'Koń',e:'🐎'},{n:'Koza',e:'🐐'},
+    {n:'Małpa',e:'🐒'},{n:'Kogut',e:'🐓'},{n:'Pies',e:'🐕'},{n:'Świnia',e:'🐖'}];
+  const EL=['Metal','Metal','Woda','Woda','Drewno','Drewno','Ogień','Ogień','Ziemia','Ziemia'];
+  // Przybliżone daty chińskiego nowego roku
+  const CNY={2020:[1,25],2021:[2,12],2022:[2,1],2023:[1,22],2024:[2,10],
+             2025:[1,29],2026:[1,17],2027:[2,6],2028:[1,26],2029:[2,13]};
+  let y=date.getFullYear();
+  const m=date.getMonth()+1,d=date.getDate();
+  const e=CNY[y];
+  if(e&&(m<e[0]||(m===e[0]&&d<e[1])))y--;
+  const i=((y-2020)%12+12)%12;
+  const ei=((y-2020)%10+10)%10;
+  return{animal:A[i].n,emoji:A[i].e,element:EL[ei],year:y};
+}
+
+function getMimeType(){
+  for(const t of['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/ogg','audio/mp4'])
+    if(MediaRecorder.isTypeSupported(t))return t;
+  return'';
+}
+
+// ─── Media init ─────────────────────────────────────────────────────────────
+async function initMedia(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:'environment'},
+      audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2,sampleRate:48000}
+    });
+    mediaStream=stream;
+    camera.srcObject=stream;
+
+    const aStream=new MediaStream(stream.getAudioTracks());
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const src=audioCtx.createMediaStreamSource(aStream);
+    gainNode=audioCtx.createGain();gainNode.gain.value=gainCtrl.value;
+    analyser=audioCtx.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.7;
+    const dest=audioCtx.createMediaStreamDestination();
+    src.connect(gainNode);gainNode.connect(analyser);gainNode.connect(dest);
+
+    startVU();startSpectrogram();
+
+    const mime=getMimeType();
+    if(!mime){showErr('Przeglądarka nie obsługuje nagrywania audio');return;}
+    mediaRecorder=new MediaRecorder(dest.stream,{mimeType:mime,audioBitsPerSecond:320000});
+    mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)audioChunks.push(e.data);};
+    mediaRecorder.onerror=e=>showErr('MediaRecorder: '+(e.error?.message||'błąd'));
+    mediaRecorder.onstop=finalizeRecording;
+
+    logMsg('✓ Kamera i mikrofon gotowe','ok');
+  }catch(e){
+    const m=e.name==='NotAllowedError'?'Odmówiono dostępu do kamery/mikrofonu — zezwól w przeglądarce':
+             e.name==='NotFoundError'?'Nie znaleziono kamery lub mikrofonu':'Błąd mediów: '+e.message;
+    showErr(m);logMsg('✗ '+m,'err');
+  }
+}
+
+// ─── Gain ────────────────────────────────────────────────────────────────────
+gainCtrl.addEventListener('input',e=>{
+  gainVal.textContent=e.target.value+'×';
+  if(gainNode)gainNode.gain.value=e.target.value;
+});
+
+// ─── VU meter ────────────────────────────────────────────────────────────────
+function startVU(){
+  if(!analyser)return;
+  const data=new Uint8Array(analyser.frequencyBinCount);
+  const step=Math.floor(data.length/N_VU);
+  function draw(){
+    vuAnimId=requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(data);
+    for(let i=0;i<N_VU;i++){
+      const sl=data.slice(i*step,(i+1)*step);
+      const lv=sl.reduce((a,b)=>a+b,0)/sl.length/255;
+      const h=Math.max(3,lv*50);
+      const clr=lv>.85?'var(--red)':lv>.55?'var(--amber)':'var(--accentLt)';
+      vuBins[i].style.height=h+'px';
+      vuBins[i].style.background=isRecording?clr:'var(--border)';
+    }
+  }
+  draw();
+}
+
+// ─── Spectrogram ─────────────────────────────────────────────────────────────
+function startSpectrogram(){
+  if(!analyser)return;
+  const buf=new Uint8Array(analyser.frequencyBinCount);
+  const maxBin=Math.floor(buf.length/2);
+  spectCtx.fillStyle='black';spectCtx.fillRect(0,0,spectCvs.width,spectCvs.height);
+  function draw(){
+    spectroAnimId=requestAnimationFrame(draw);
+    analyser.getByteFrequencyData(buf);
+    const img=spectCtx.getImageData(1,0,spectCvs.width-1,spectCvs.height);
+    spectCtx.putImageData(img,0,0);
+    for(let i=0;i<maxBin;i++){
+      const v=buf[i];
+      const clr=isRecording?`rgb(${Math.min(255,v*1.5)},${v},${Math.max(0,v*.3)})`:`rgb(${v>>1},${v>>1},${v>>1})`;
+      spectCtx.fillStyle=clr;
+      const y=spectCvs.height-1-Math.floor(i/maxBin*spectCvs.height);
+      const h=Math.ceil(spectCvs.height/maxBin);
+      spectCtx.fillRect(spectCvs.width-1,y,1,h);
+    }
+  }
+  draw();
+}
+
+// ─── Record button ───────────────────────────────────────────────────────────
+recBtn.addEventListener('click',()=>{
+  if(!mediaRecorder){showErr('Brak dostępu do mikrofonu — sprawdź uprawnienia');return;}
+  if(isRecording)stopRecording();
+  else startRecording();
+});
+
+function startRecording(){
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  audioChunks=[];
+  mediaRecorder.start(200);
+  isRecording=true;
+  recBtn.classList.add('recording');
+  recSeconds=0;
+  recTimer.textContent='● '+fmtDur(0);
+  recHint.textContent='NAGRYWAM...';
+  recTimerInterval=setInterval(()=>{
+    recSeconds++;
+    recTimer.textContent='● '+fmtDur(recSeconds);
+    if(recDuration>0&&recSeconds>=recDuration)stopRecording();
+  },1000);
+  logMsg('⏺ Nagrywanie rozpoczęte','warn');
+}
+
+function stopRecording(){
+  if(!isRecording)return;
+  clearInterval(recTimerInterval);
+  mediaRecorder.stop();
+  isRecording=false;
+  recBtn.classList.remove('recording');
+  recTimer.textContent='';
+  recHint.textContent=recDuration?`TRYB AUTO ${recDuration}s | NACIŚNIJ ABY NAGRAĆ`:'TRYB RĘCZNY | NACIŚNIJ ABY NAGRAĆ';
+}
+
+// ─── Finalize ────────────────────────────────────────────────────────────────
+function finalizeRecording(){
+  const mime=getMimeType();
+  const blob=new Blob(audioChunks,{type:mime});
+  const url=URL.createObjectURL(blob);
+  const ts=new Date();
+  const fn=`GPA_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+
+  let photoUrl=null;
+  if(camera.videoWidth>0){
+    const cv=document.createElement('canvas');
+    cv.width=camera.videoWidth;cv.height=camera.videoHeight;
+    cv.getContext('2d').drawImage(camera,0,0);
+    photoUrl=cv.toDataURL('image/jpeg',.92);
+  }
+
+  const loc=locationData;
+  const wx=weatherData;
+  const ext=extData;
+  const td=getTimeDetails(ts);
+  const moon=moonPhase(ts);
+  const st=loc?sunTimes(loc.lat,loc.lng,ts):null;
+
+  // Wyodrębnij tytuły newsów do metadanych
+  const newsSnapshot=newsData?{
+    polska: newsData.polska?.map(i=>i.title)||[],
+    europa: newsData.europa?.map(i=>i.title)||[],
+    swiat:  newsData.swiat?.map(i=>i.title)||[],
+    fetchedAt: newsData.fetchedAt||null
+  }:null;
+
+  const metadata={
+    filename:fn, timestamp:ts.toISOString(),
+    duration_s:recSeconds, size_bytes:blob.size, mime_type:mime,
+    gain_applied:gainCtrl.value+'x',
+    recordist:$('mfRecordist').value, project:$('mfProject').value,
+    habitat:$('mfHabitat').value, notes:$('mfNotes').value,
+    device:$('mfDevice').value, mic:$('mfMic').value,
+    gps:loc?{lat:loc.lat,lng:loc.lng,altitude:loc.alt,accuracy:loc.acc}:null,
+    location_name:loc?loc.name:null,
+    address:loc?loc.addr:null,
+    weather:wx||null,
+    sun:st||null,
+    moon:{emoji:moon.emoji,name:moon.name,pct:moon.pct},
+    time_of_day:td.timeOfDay, season:td.season,
+    zodiac:zodiacSign(ts),
+    chinese_year:chineseYear(ts),
+    context:ext||null,
+    news_headlines:newsSnapshot
+  };
+
+  const rec={id:Date.now(),fn,url,photoUrl,size:blob.size,mime,duration:recSeconds,timestamp:ts.toISOString(),metadata};
+  recordings.unshift(rec);
+  updateArchive();
+  logMsg(`✓ Zapisano: ${fn} (${fmtDur(recSeconds)}, ${fmtSz(blob.size)})`,'ok');
+}
+
+// ─── Archive ─────────────────────────────────────────────────────────────────
+function updateArchive(){
+  const n=recordings.length;
+  arcCount.textContent=n?`(${n})`:'';
+  arcHeader.textContent=`ARCHIWUM SESJI — ${n} ${n===1?'NAGRANIE':n<5&&n>1?'NAGRANIA':'NAGRAŃ'}`;
+  if(!n){arcList.innerHTML='<div class="emptyArchive">Brak nagrań.<br><span style="font-size:10px">Przejdź do ● REC.</span></div>';return;}
+  arcList.innerHTML='';
+  recordings.forEach((rec,i)=>{
+    const md=rec.metadata;
+    const div=document.createElement('div');
+    div.className='recCard';
+    const ts=new Date(rec.timestamp);
+    const isMeta=!rec.url;
+    div.innerHTML=`
+      ${isMeta?'<span class="recTag meta">ONLY METADATA</span>':''}
+      <h3>#${String(recordings.length-i).padStart(3,'0')} · ${rec.fn}</h3>
+      <div class="recMeta">
+        ${ts.toLocaleString('pl-PL')} · ${isMeta?'metadane':'audio '+fmtDur(rec.duration)} · ${fmtSz(rec.size)}<br>
+        ${md.location_name?'📍 '+md.location_name.split(',').slice(0,2).join(',')+'<br>':''}
+        ${md.gps?'🗺 '+md.gps.lat.toFixed(5)+'°, '+md.gps.lng.toFixed(5)+'° · ±'+Math.round(md.gps.accuracy)+'m<br>':''}
+        ${md.address?.city?'🏙 '+[md.address.district,md.address.city,md.address.region,md.address.country].filter(Boolean).join(' · ')+'<br>':''}
+        ${md.address?.continent_region?'🌐 '+md.address.continent_region+'<br>':''}
+        ${md.weather?'🌡 '+md.weather.temp+'°C · 💧'+md.weather.humidity+'% · 🌬'+md.weather.windSpeed+'m/s '+md.weather.windDir+'<br>':''}
+        ${md.sun?'🌅'+md.sun.sunrise+' / 🌇'+md.sun.sunset+' · '+md.moon.emoji+' '+md.moon.name+'<br>':''}
+        ${md.zodiac?md.zodiac.symbol+' '+md.zodiac.name+' · '+md.chinese_year.emoji+' '+md.chinese_year.element+' '+md.chinese_year.animal+' ('+md.chinese_year.year+')<br>':''}
+        ${md.news_headlines?'📰 '+[...md.news_headlines.polska.slice(0,1),...md.news_headlines.europa.slice(0,1),...md.news_headlines.swiat.slice(0,1)].join(' / ')+'<br>':''}
+        ${md.project?'📁 '+md.project+'<br>':''}${md.recordist?'👤 '+md.recordist+'<br>':''}
+        ${md.habitat?'🌿 '+md.habitat+'<br>':''}${md.notes?'"'+md.notes+'"':''}
+      </div>
+      ${rec.url?`<audio class="recAudio" controls src="${rec.url}"></audio>`:''}
+      ${rec.photoUrl?`<img class="recPhoto visible" src="${rec.photoUrl}" alt="foto">`:''}
+      <div class="recButtons">
+        ${rec.url?`<button class="btnAudio" onclick="dlFile('${rec.url}','${rec.fn}.webm')">↓ AUDIO</button>`:''}
+        ${rec.photoUrl?`<button class="btnPhoto" onclick="dlFile('${rec.photoUrl}','${rec.fn}.jpg')">↓ FOTO</button>`:''}
+        <button class="btnJson" onclick="dlJson(${rec.id})">↓ JSON</button>
+        <button class="btnDrive" onclick="uploadToDrive(${rec.id})">↑ DRIVE</button>
+      </div>`;
+    arcList.appendChild(div);
+  });
+}
+
+function dlFile(url,name){const a=document.createElement('a');a.href=url;a.download=name;a.click();}
+function dlJson(id){
+  const rec=recordings.find(r=>r.id===id);if(!rec)return;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(rec.metadata,null,2)],{type:'application/json'}));
+  a.download=rec.fn+'.json';a.click();
+}
+
+// ─── GPS + all data ──────────────────────────────────────────────────────────
+locBtn.addEventListener('click',fetchAll);
+
+async function fetchAll(){
+  if(!navigator.geolocation){showErr('Geolokalizacja niedostępna');return;}
+  locBtn.textContent='◌ POBIERANIE GPS...';locBtn.className='loading';
+  $('gpsIndicator').textContent='GPS ◌';$('gpsIndicator').className='loading';
+
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const{latitude:lat,longitude:lng,altitude:alt,accuracy:acc}=pos.coords;
+    $('gpsIndicator').textContent='GPS ▲';$('gpsIndicator').className='ok';
+    logMsg(`📡 GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)} ±${Math.round(acc)}m`,'ok');
+    locBtn.textContent='▲ AKTUALIZOWANIE DANYCH...';
+
+    locationData={lat,lng,alt,acc,name:'',addr:null};
+
+    logMsg('🌐 Odpytywanie: Nominatim, Open-Meteo, Wikipedia, NOAA, USGS, OpenSky, RSS...','info');
+    const[nom,wx,wiki,space,eq,flights,newsResult]=await Promise.allSettled([
+      fetchNominatim(lat,lng), fetchWeather(lat,lng), fetchWiki(lat,lng),
+      fetchSpace(), fetchEq(lat,lng), fetchFlights(lat,lng),
+      fetchAllNews()   // ← METAWARSTWA dołączona do paczki GPS
+    ]);
+
+    // Nominatim
+    if(nom.status==='fulfilled'){
+      const a=nom.value;
+      locationData.name=a.display_name?.split(',').slice(0,4).join(', ')||'';
+      locationData.addr=parseAddress(a.address||{});
+      locName.textContent=locationData.name;
+      const g=locationData;
+      locGrid.innerHTML=dg([['SZEROKOŚĆ',g.lat.toFixed(6)+'°'],['DŁUGOŚĆ',g.lng.toFixed(6)+'°'],['WYSOKOŚĆ',g.alt!=null?Math.round(g.alt)+' m n.p.m.':'—'],['DOKŁADNOŚĆ','±'+Math.round(g.acc)+' m']]);
+      const st=sunTimes(lat,lng),moon=moonPhase();
+      sunMoon.innerHTML=(st?`<span>🌅 ${st.sunrise}</span><span>🌇 ${st.sunset}</span>`:'')+`<span>${moon.emoji} ${moon.name} (${moon.pct}%)</span>`;
+      locCard.style.display='block';
+      logMsg('✓ Lokalizacja','ok');
+    } else {logMsg('✗ Nominatim: '+nom.reason?.message,'err');}
+
+    // Weather
+    if(wx.status==='fulfilled'){
+      weatherData=wx.value;
+      wxGrid.innerHTML=dg3([['TEMP',weatherData.temp+'°C'],['WILGOT.',weatherData.humidity+'%'],['WIATR',weatherData.windSpeed+'m/s'],['KIERUNEK',weatherData.windDir],['CIŚNIENIE',weatherData.pressure+' hPa'],['CHMURY',weatherData.clouds+'%']]);
+      wxCard.style.display='block';
+      logMsg('✓ Pogoda (Open-Meteo)','ok');
+    } else {logMsg('✗ Pogoda: '+wx.reason?.message,'err');}
+
+    // External data
+    const extLines=[];
+    if(wiki.status==='fulfilled'&&wiki.value){extLines.push(`📚 Wikipedia (1km): ${wiki.value}`);logMsg('✓ Wikipedia','ok');}
+    else logMsg('✗ Wikipedia: '+(wiki.reason?.message||'brak'),'warn');
+    if(space.status==='fulfilled'&&space.value){extLines.push(`🌌 Pogoda kosmiczna: ${space.value}`);}
+    if(eq.status==='fulfilled'&&eq.value){extLines.push(`🌍 Sejsmologia (200km/30dni): ${eq.value}`);}
+    if(flights.status==='fulfilled'&&flights.value){extLines.push(`✈️ Ruch lotniczy: ${flights.value}`);}
+    if(extLines.length){
+      extData={wiki:wiki.status==='fulfilled'?wiki.value:null,space:space.status==='fulfilled'?space.value:null,eq:eq.status==='fulfilled'?eq.value:null,flights:flights.status==='fulfilled'?flights.value:null};
+      extGrid.innerHTML=extLines.join('<br>');
+      extCard.style.display='block';
+    }
+
+    locBtn.textContent='▲ DANE AKTUALNE — ODŚWIEŻ';locBtn.className='ok';
+    logMsg('✅ Wszystkie dane pobrane','ok');
+  },err=>{
+    const msgs={1:'Odmówiono uprawnień GPS',2:'Lokalizacja niedostępna',3:'Timeout GPS'};
+    showErr(msgs[err.code]||err.message);
+    $('gpsIndicator').textContent='GPS ✕';$('gpsIndicator').className='error';
+    locBtn.textContent='○ POBIERZ LOKALIZACJĘ + POGODĘ + DANE KONTEKSTOWE';locBtn.className='';
+    logMsg('✗ GPS: '+msgs[err.code],'err');
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:30000});
+}
+
+// ─── Data grid helpers ───────────────────────────────────────────────────────
+function dg(items){return items.map(([l,v])=>`<div><div class="dk">${l}</div><div class="dv">${v}</div></div>`).join('');}
+function dg3(items){return`<div class="dg dg3">${items.map(([l,v])=>`<div><div class="dk">${l}</div><div class="dv">${v}</div></div>`).join('')}</div>`;}
+
+// ─── API calls — dane kontekstowe ───────────────────────────────────────────
+async function fetchNominatim(lat,lng){
+  const r=await fetchT(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18`,7000);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+async function fetchWeather(lat,lng){
+  const r=await fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms&timezone=auto`);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const d=await r.json(),c=d.current;
+  return{temp:c.temperature_2m,humidity:c.relative_humidity_2m,pressure:Math.round(c.pressure_msl),windSpeed:c.wind_speed_10m,windDir:wDir(c.wind_direction_10m),windDeg:c.wind_direction_10m,clouds:c.cloud_cover,precip:c.precipitation};
+}
+
+async function fetchWiki(lat,lng){
+  const r=await fetchT(`https://pl.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=1000&gslimit=5&format=json&origin=*`);
+  const d=await r.json();
+  return d.query?.geosearch?.map(i=>i.title).join(', ')||null;
+}
+
+async function fetchSpace(){
+  const r=await fetchT('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json');
+  const d=await r.json();
+  if(d&&d.length>1){const last=d[d.length-1];if(last&&last[1]!==undefined)return`Indeks Kp = ${last[1]}`;}
+  return'Brak danych';
+}
+
+async function fetchEq(lat,lng){
+  let d=new Date();d.setDate(d.getDate()-30);
+  const r=await fetchT(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${lat}&longitude=${lng}&maxradiuskm=200&starttime=${d.toISOString().split('T')[0]}&limit=1`);
+  const data=await r.json();
+  if(data.features?.length>0)return`Mag ${data.features[0].properties.mag}, ${data.features[0].properties.place}`;
+  return'Brak wstrząsów (30 dni)';
+}
+
+async function fetchFlights(lat,lng){
+  const b=0.3;
+  const r=await fetchT(`https://opensky-network.org/api/states/all?lamin=${lat-b}&lomin=${lng-b}&lamax=${lat+b}&lomax=${lng+b}`);
+  const d=await r.json();
+  return d.states?.length>0?`Wykryto ${d.states.length} samolotów`:'Brak na radarze';
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  METAWARSTWA NEWSOWA — własny parser XML, bez zewnętrznych API z kluczem
+//
+//  Architektura: CORS proxy (allorigins.win) → surowy XML → DOMParser
+//  Proxy: https://api.allorigins.win/raw?url=ENCODED_RSS_URL
+//    • darmowe, bez klucza, open-source
+//    • zwraca dokładnie treść zdalnego URL przez serwer proxy (omija CORS)
+//    • fallback: https://corsproxy.io/?ENCODED_RSS_URL
+//
+//  Dlaczego nie rss2json.com?
+//    HTTP 422 = ich darmowy tier wymaga teraz klucza API dla wielu feedów.
+//    Własny parser XML przez proxy jest niezależny i trwalszy.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Konfiguracja kanałów — każdy ma listę URL-i próbowanych po kolei
+const NEWS_FEEDS = [
+  {
+    key:   'polska',
+    emoji: '🇵🇱',
+    label: 'POLSKA',
+    urls: [
+      'https://www.rmf24.pl/feed',                              // RMF24 — niezawodny
+      'https://fakty.interia.pl/feed',                          // Interia Fakty
+      'https://wiadomosci.wp.pl/rss.xml',                       // WP.pl
+      'https://rss.gazeta.pl/pub/rss/najwazniejsze.xml'         // Gazeta.pl
+    ]
+  },
+  {
+    key:   'europa',
+    emoji: '🇪🇺',
+    label: 'EUROPA',
+    urls: [
+      'https://rss.dw.com/rdf/rss-en-eu',                      // Deutsche Welle
+      'https://feeds.bbci.co.uk/news/europe/rss.xml',           // BBC Europe
+      'https://www.euractiv.com/sections/politics/feed/'        // EurActiv
+    ]
+  },
+  {
+    key:   'swiat',
+    emoji: '🌍',
+    label: 'ŚWIAT',
+    urls: [
+      'https://feeds.bbci.co.uk/news/world/rss.xml',            // BBC World
+      'https://rss.dw.com/rdf/rss-en-all',                     // Deutsche Welle All
+      'https://www.aljazeera.com/xml/rss/all.xml'              // Al Jazeera (zastąpił Reuters, który usunął feedy publiczne w 2020)
+    ]
+  }
+];
+
+// Trzy CORS proxy próbowane po kolei — kolejność odzwierciedla niezawodność
+const CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+];
+
+// Pomocnicza: czas temu (po polsku)
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const diff = (Date.now() - new Date(dateStr)) / 60000;
+  if (!isFinite(diff) || diff < 0) return '';
+  if (diff < 2)    return 'przed chwilą';
+  if (diff < 60)   return `${Math.round(diff)} min temu`;
+  if (diff < 1440) return `${Math.round(diff / 60)} godz. temu`;
+  return `${Math.round(diff / 1440)} dni temu`;
+}
+
+function shortDomain(url) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); }
+  catch { return ''; }
+}
+
+function stripHtml(str) {
+  if (!str) return '';
+  return str.replace(/<[^>]+>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
+}
+
+function truncate(str, maxLen = 88) {
+  str = stripHtml(str);
+  return str.length > maxLen ? str.slice(0, maxLen).trimEnd() + '…' : str;
+}
+
+// Parsuj surowy XML RSS → lista artykułów
+function parseRssXml(xmlText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xmlText, 'text/xml');
+
+  // Sprawdź błąd parsowania
+  if (doc.querySelector('parsererror')) throw new Error('Niepoprawny XML');
+
+  const feedTitle = doc.querySelector('channel > title')?.textContent || '';
+
+  // Obsługa zarówno RSS 2.0 (<item>) jak i Atom (<entry>)
+  const isAtom = doc.querySelector('feed entry') !== null;
+  const itemSel = isAtom ? 'entry' : 'item';
+
+  const items = [...doc.querySelectorAll(itemSel)].map(el => {
+    // link: RSS ma <link>, Atom ma <link href="…"> lub <link>
+    let link = '';
+    const linkEl = el.querySelector('link');
+    if (linkEl) link = linkEl.getAttribute('href') || linkEl.textContent || '';
+
+    // pubDate: RSS = <pubDate>, Atom = <published> lub <updated>
+    const pubDate =
+      el.querySelector('pubDate')?.textContent ||
+      el.querySelector('published')?.textContent ||
+      el.querySelector('updated')?.textContent || '';
+
+    return {
+      title:   el.querySelector('title')?.textContent || '',
+      link:    link.trim(),
+      pubDate: pubDate.trim()
+    };
+  });
+
+  return { feedTitle, items };
+}
+
+// Pomocnicza: rozwiązuje się gdy PIERWSZY promise zakończy się sukcesem.
+// W przeciwieństwie do Promise.race nie "przegrywa" przy pierwszym błędzie —
+// czeka aż wszystkie zawiodą, dopiero wtedy odrzuca.
+function firstSuccess(promises) {
+  return new Promise((resolve, reject) => {
+    if (!promises.length) { reject(new Error('Brak źródeł')); return; }
+    let remaining = promises.length;
+    promises.forEach(p =>
+      Promise.resolve(p).then(resolve, () => { if (!--remaining) reject(new Error('Niedostępne')); })
+    );
+  });
+}
+
+// Pobierz RSS: dla każdego proxy próbuje RÓWNOLEGLE wszystkich URL-i
+// i zwraca wynik pierwszego który odpowie poprawnie (najszybszy wygrywa).
+// Jeśli wszystkie URL-e zawodzą na danym proxy → przechodzi do następnego.
+// Worst-case: 10s × 3 proxy = 30s (vs poprzednie 9s × url × proxy = 54s+)
+async function fetchRssFeed(urls, label, count = 4) {
+  for (let pi = 0; pi < CORS_PROXIES.length; pi++) {
+    const proxyFn = CORS_PROXIES[pi];
+    try {
+      return await firstSuccess(urls.map(async url => {
+        const r = await fetchT(proxyFn(url), 10000);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const text = await r.text();
+        if (!text || text.length < 100) throw new Error('Pusta odpowiedź');
+        const { feedTitle, items } = parseRssXml(text);
+        if (items.length === 0) throw new Error('Feed pusty');
+        return { feedTitle, items: items.slice(0, count), sourceUrl: url };
+      }));
+    } catch (e) {
+      if (pi < CORS_PROXIES.length - 1)
+        logMsg(`⚠ RSS ${label} — proxy ${pi + 1} nieudane, zmiana...`, 'warn');
+    }
+  }
+  throw new Error('Wszystkie proxy i źródła niedostępne');
+}
+
+// Pobierz wszystkie 3 kanały równolegle i wyrenderuj kartę
+async function fetchAllNews() {
+  newsCard.style.display = 'block';
+  newsBtn.textContent = '◌ POBIERANIE AKTUALNOŚCI...';
+  newsBtn.className = 'loading';
+  newsGrid.innerHTML = '<div class="newsSpinner">◌ ŁADOWANIE POLSKA · EUROPA · ŚWIAT</div>';
+
+  const results = await Promise.allSettled(
+    NEWS_FEEDS.map(f => fetchRssFeed(f.urls, f.label))
+  );
+
+  let html = '';
+  const now = new Date();
+  newsData = { fetchedAt: now.toISOString() };
+
+  results.forEach((res, idx) => {
+    const feed = NEWS_FEEDS[idx];
+    html += `<div class="newsSect"><div class="newsCatHdr">
+      <span class="newsCatEmoji">${feed.emoji}</span>
+      <span class="newsCatLabel">${feed.label}</span>`;
+
+    if (res.status === 'fulfilled') {
+      const { items, feedTitle, sourceUrl } = res.value;
+      const src = feedTitle ? truncate(feedTitle, 22) : shortDomain(sourceUrl);
+      html += `<span class="newsCatSrc">${src}</span></div>`;
+      newsData[feed.key] = items;
+
+      items.forEach(item => {
+        const title  = truncate(item.title, 88);
+        const ago    = timeAgo(item.pubDate);
+        const domain = shortDomain(item.link || sourceUrl);
+        const link   = item.link || '#';
+        // Zabezpieczenie przed cudzysłowami w onclick
+        const safeLink = link.replace(/'/g, '%27');
+        html += `<div class="newsItem">
+          <div class="newsTitle" onclick="window.open('${safeLink}','_blank','noopener')">${title}</div>
+          <div class="newsMeta">
+            <span>${domain}</span>
+            ${ago ? `<span class="newsAgo">${ago}</span>` : ''}
+          </div>
+        </div>`;
+      });
+
+      logMsg(`✓ RSS ${feed.label}: ${items.length} nagłówków (${shortDomain(sourceUrl)})`, 'ok');
+    } else {
+      html += `<span class="newsCatSrc">BŁĄD</span></div>`;
+      html += `<div class="newsErr">✗ ${res.reason?.message || 'Wszystkie źródła niedostępne'}</div>`;
+      newsData[feed.key] = [];
+      logMsg(`✗ RSS ${feed.label}: ${res.reason?.message}`, 'err');
+    }
+
+    html += `</div>`;
+  });
+
+  newsGrid.innerHTML = html;
+  const ts = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+  $('newsFetchedAt').textContent = `ostatnia aktualizacja: ${ts}`;
+  newsBtn.textContent = '📰 AKTUALNOŚCI — ODŚWIEŻ';
+  newsBtn.className = 'ok';
+  return newsData;
+}
+
+// Przyciski news
+newsBtn.addEventListener('click', fetchAllNews);
+$('newsInlineRefresh').addEventListener('click', fetchAllNews);
+
+// ─── Zapis metadanych bez nagrania (dla nagrań na zewnętrznym sprzęcie) ───────
+$('metaOnlyBtn').addEventListener('click', saveMetadataOnly);
+
+function saveMetadataOnly(){
+  const ts=new Date();
+  const fn=`META_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+  let photoUrl=null;
+  if(camera.videoWidth>0){
+    const cv=document.createElement('canvas');
+    cv.width=camera.videoWidth;cv.height=camera.videoHeight;
+    cv.getContext('2d').drawImage(camera,0,0);
+    photoUrl=cv.toDataURL('image/jpeg',.92);
+  }
+  const loc=locationData,wx=weatherData,ext=extData;
+  const td=getTimeDetails(ts),moon=moonPhase(ts),st=loc?sunTimes(loc.lat,loc.lng,ts):null;
+  const newsSnapshot=newsData?{
+    polska:newsData.polska?.map(i=>i.title)||[],
+    europa:newsData.europa?.map(i=>i.title)||[],
+    swiat: newsData.swiat?.map(i=>i.title)||[],
+    fetchedAt:newsData.fetchedAt||null
+  }:null;
+  const metadata={
+    filename:fn, timestamp:ts.toISOString(), type:'metadata_only',
+    recordist:$('mfRecordist').value, project:$('mfProject').value,
+    habitat:$('mfHabitat').value, notes:$('mfNotes').value,
+    device:$('mfDevice').value, mic:$('mfMic').value,
+    gps:loc?{lat:loc.lat,lng:loc.lng,altitude:loc.alt,accuracy:loc.acc}:null,
+    location_name:loc?loc.name:null, address:loc?loc.addr:null,
+    weather:wx||null, sun:st||null,
+    moon:{emoji:moon.emoji,name:moon.name,pct:moon.pct},
+    time_of_day:td.timeOfDay, season:td.season,
+    zodiac:zodiacSign(ts), chinese_year:chineseYear(ts),
+    context:ext||null, news_headlines:newsSnapshot
+  };
+  const rec={id:Date.now(),fn,url:null,photoUrl,size:0,mime:null,duration:0,timestamp:ts.toISOString(),metadata};
+  recordings.unshift(rec);
+  updateArchive();
+  logMsg(`✓ Metadane zapisane: ${fn}`,'ok');
+  const btn=$('metaOnlyBtn');
+  btn.textContent='✓ ZAPISANO — KLIKNIJ PONOWNIE ABY DODAĆ KOLEJNE';
+  btn.className='saved';
+  setTimeout(()=>{btn.textContent='💾 ZAPISZ METADANE (BEZ NAGRANIA)';btn.className='';},3000);
+}
+
+// ─── Google Drive ─────────────────────────────────────────────────────────────
+let gdToken=null;
+
+// Trwałe ustawienia Drive
+['gdClientId','gdFolderId'].forEach(id=>{
+  const el=$(id);
+  el.value=localStorage.getItem(id)||'';
+  el.addEventListener('change',()=>localStorage.setItem(id,el.value.trim()));
+});
+
+$('gdAuthBtn').addEventListener('click',async()=>{
+  try{await gdAuth();}catch(e){showErr('Google Auth: '+e.message);}
+});
+
+async function loadGIS(){
+  if(window.google?.accounts?.oauth2)return;
+  await new Promise(resolve=>{
+    const s=document.createElement('script');
+    s.src='https://accounts.google.com/gsi/client';
+    s.onload=resolve;document.head.appendChild(s);
+  });
+}
+
+async function gdAuth(){
+  const clientId=$('gdClientId').value.trim();
+  if(!clientId)throw new Error('Wpisz Client ID Google w zakładce Ustawienia');
+  await loadGIS();
+  return new Promise((resolve,reject)=>{
+    const client=google.accounts.oauth2.initTokenClient({
+      client_id:clientId,
+      scope:'https://www.googleapis.com/auth/drive.file',
+      callback:resp=>{
+        if(resp.error){reject(new Error(resp.error_description||resp.error));return;}
+        gdToken=resp;
+        $('gdStatus').textContent='✓ Połączono z Google Drive';
+        $('gdStatus').style.color='var(--accentLt)';
+        $('gdAuthBtn').textContent='✓ ZALOGOWANO — KLIKNIJ ABY ZMIENIĆ KONTO';
+        $('gdAuthBtn').className='ok';
+        resolve(resp);
+      }
+    });
+    client.requestAccessToken();
+  });
+}
+
+async function uploadToDrive(recId){
+  const rec=recordings.find(r=>r.id===recId);
+  if(!rec)return;
+  try{
+    if(!gdToken)await gdAuth();
+    const folderId=$('gdFolderId').value.trim();
+    const jsonBlob=new Blob([JSON.stringify(rec.metadata,null,2)],{type:'application/json'});
+    const meta={name:rec.fn+'.json',mimeType:'application/json'};
+    if(folderId)meta.parents=[folderId];
+    const form=new FormData();
+    form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+    form.append('file',jsonBlob);
+    const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+      method:'POST',
+      headers:{Authorization:'Bearer '+gdToken.access_token},
+      body:form
+    });
+    if(r.status===401){gdToken=null;throw new Error('Token wygasł — zaloguj ponownie w Ustawieniach');}
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const f=await r.json();
+    logMsg(`✓ Drive: ${rec.fn}.json (id: ${f.id})`,'ok');
+  }catch(e){
+    showErr('Drive: '+e.message);
+    logMsg('✗ Drive: '+e.message,'err');
+  }
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+window.addEventListener('load', initMedia);
+</script>
+</body>
+</html>
