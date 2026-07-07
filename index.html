@@ -1,0 +1,1421 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#060E0A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Zatrzymać Chwilę</title>
+<style>
+/* ════════ ZATRZYMAĆ CHWILĘ v2 — instrument, nie formularz ════════ */
+:root{
+  --bg:#060E0A; --panel:#0A1710; --border:#163022;
+  --accent:#245D3C; --accentLt:#4CAF7D; --accentDim:#1B4630;
+  --text:#9DBBA9; --textDim:#5A7A66; --white:#D8E8DD; --data:#7FCFA3;
+  --red:#E53935; --redGlow:rgba(229,57,53,.45); --amber:#F5A623;
+  --blue:#6BA3D6;
+  --mono:'Courier New',ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;
+  display:flex;flex-direction:column;
+  padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+
+/* ── PASEK STATUSU ── */
+#statusBar{display:flex;justify-content:space-between;align-items:center;
+  padding:6px 12px;font-size:9px;letter-spacing:1px;border-bottom:1px solid var(--border);
+  background:var(--bg);z-index:20;flex-shrink:0}
+.onlineDot{color:var(--accentLt)} .offlineDot{color:var(--red)}
+#gpsInd.ok{color:var(--accentLt)} #gpsInd.loading{color:var(--amber)} #gpsInd.error{color:var(--red)}
+
+/* ── EKRANY ── */
+#screens{flex:1;position:relative;overflow:hidden}
+.screen{position:absolute;inset:0;display:none;flex-direction:column}
+.screen.active{display:flex}
+
+/* ════════ EKRAN 1: WIZJER ════════ */
+#scr-wizjer{background:#000}
+#vfArea{flex:1;position:relative;overflow:hidden;min-height:0}
+#cam{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#spectro{position:absolute;bottom:0;left:0;width:100%;height:44px;
+  background:rgba(3,8,5,.82);border-top:1px solid rgba(22,48,34,.6)}
+#dbRead{position:absolute;bottom:48px;right:8px;font-size:10px;color:var(--data);
+  background:rgba(3,8,5,.65);padding:2px 7px;border-radius:4px;letter-spacing:1px}
+#flipBtn{position:absolute;top:10px;right:10px;width:40px;height:40px;border-radius:50%;
+  background:rgba(3,8,5,.55);border:1px solid var(--border);color:var(--text);
+  font-size:16px;cursor:pointer;z-index:5}
+
+/* dok sterowania — strefa kciuka */
+#dock{flex-shrink:0;background:var(--bg);padding:8px 0 10px;
+  display:flex;flex-direction:column;align-items:center;border-top:1px solid var(--border)}
+#recTimer{font-size:20px;color:var(--red);letter-spacing:3px;height:24px;
+  display:flex;align-items:center}
+#recHint{font-size:9px;color:var(--textDim);letter-spacing:1.5px;height:14px;margin-bottom:4px}
+
+#ringWrap{position:relative;width:128px;height:128px;display:flex;
+  align-items:center;justify-content:center}
+#ringSvg{position:absolute;inset:0;transform:rotate(-90deg)}
+.ringSeg{fill:none;stroke-width:3;stroke-linecap:round;transition:stroke .3s,opacity .3s}
+.ringSeg.idle{stroke:var(--border);opacity:.7}
+.ringSeg.loading{stroke:var(--amber);animation:segPulse 1s ease-in-out infinite}
+.ringSeg.ok{stroke:var(--accentLt);opacity:1}
+.ringSeg.err{stroke:var(--red);opacity:.85}
+@keyframes segPulse{0%,100%{opacity:.25}50%{opacity:1}}
+
+#recBtn{width:84px;height:84px;border-radius:50%;border:3px solid var(--accent);
+  background:rgba(6,14,10,.9);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;transition:all .2s;z-index:2}
+#recBtn.recording{border-color:var(--red);background:rgba(229,57,53,.12);
+  box-shadow:0 0 30px var(--redGlow)}
+#recBtn .dot{width:30px;height:30px;background:var(--red);border-radius:50%;transition:all .2s}
+#recBtn.recording .dot{border-radius:4px;width:24px;height:24px}
+
+#sealBtn{position:absolute;left:calc(50% + 78px);top:50%;transform:translateY(-50%);
+  width:48px;height:48px;border-radius:50%;background:transparent;
+  border:1px dashed var(--border);color:var(--textDim);font-size:17px;cursor:pointer;
+  transition:all .2s}
+#sealBtn.busy{border-color:var(--amber);color:var(--amber);border-style:solid;
+  animation:segPulse 1s infinite}
+#sealBtn.done{border-color:var(--accentLt);color:var(--accentLt);border-style:solid}
+#dockMid{position:relative;width:100%;display:flex;justify-content:center}
+
+#ringLegend{display:flex;gap:12px;margin-top:5px;font-size:7px;letter-spacing:1px;
+  color:var(--textDim)}
+#ringLegend span::before{content:'●';margin-right:3px;color:var(--border)}
+#ringLegend span.loading::before{color:var(--amber)}
+#ringLegend span.ok::before{color:var(--accentLt)}
+#ringLegend span.err::before{color:var(--red)}
+
+/* ════════ EKRAN 2: KAPSUŁA ════════ */
+#scr-kapsula{background:var(--bg)}
+#kapHead{flex-shrink:0;display:flex;align-items:center;gap:8px;
+  padding:8px 10px;border-bottom:1px solid var(--border)}
+#kapBack{background:transparent;border:1px solid var(--border);border-radius:6px;
+  color:var(--text);font-family:var(--mono);font-size:12px;padding:6px 11px;cursor:pointer}
+#kapTitle{flex:1;font-size:10px;color:var(--white);letter-spacing:1px;line-height:1.4}
+#kapLayers{display:flex;gap:4px}
+.layerBtn{background:transparent;border:1px solid var(--border);border-radius:5px;
+  color:var(--textDim);font-family:var(--mono);font-size:8px;letter-spacing:1px;
+  padding:6px 8px;cursor:pointer;transition:all .15s}
+.layerBtn.sel{border-color:var(--accent);color:var(--accentLt);background:rgba(36,93,60,.2)}
+#kapBody{flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
+
+.warstwa{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:12px;margin-bottom:10px}
+.wLbl{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
+.wName{color:var(--accentLt);font-size:10px;letter-spacing:2px;font-weight:700}
+.wScale{color:var(--textDim);font-size:7px;letter-spacing:1px}
+.wRow{display:flex;justify-content:space-between;gap:8px;padding:3px 0;font-size:11px;
+  line-height:1.5}
+.wKey{color:var(--textDim);font-size:9px;letter-spacing:.5px;flex-shrink:0}
+.wVal{color:var(--data);text-align:right;word-break:break-word}
+.wText{color:var(--text);font-size:11px;line-height:1.7}
+.wSeal{color:var(--white);font-size:13px;line-height:1.8;text-align:center;
+  padding:8px 4px;font-style:italic}
+.wPhoto{width:100%;border-radius:6px;margin-bottom:8px;max-height:230px;object-fit:cover}
+.wAudio{width:100%;height:32px;margin:6px 0}
+.wNote{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  padding:9px;color:var(--white);font-family:var(--mono);font-size:12px;line-height:1.6;
+  min-height:76px;resize:vertical;outline:none}
+.wNote:focus{border-color:var(--accent)}
+.wInput{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;
+  padding:6px 8px;color:var(--white);font-family:var(--mono);font-size:11px;outline:none;
+  margin-top:3px}
+.wField{margin-bottom:8px}
+.wField .wKey{display:block;margin-bottom:2px}
+.newsT{padding:4px 0 4px 8px;border-left:2px solid var(--border);margin-bottom:4px;
+  font-size:10px;color:var(--white);line-height:1.5}
+.newsH{color:var(--accentLt);font-size:8px;letter-spacing:2px;margin:8px 0 5px}
+.planetRow{display:flex;justify-content:space-between;font-size:10px;padding:3px 0;
+  color:var(--data)}
+.planetRow .pc{color:var(--textDim);font-size:9px}
+
+#kapActions{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:24px}
+#kapActions button{flex:1;min-width:70px;padding:9px 4px;background:transparent;
+  border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:9px;letter-spacing:1px}
+.aAudio{border:1px solid var(--accent);color:var(--accentLt)}
+.aJson{border:1px solid var(--border);color:var(--textDim)}
+.aDrive{border:1px solid #3a6b9e;color:var(--blue)}
+.aDel{border:1px solid rgba(229,57,53,.4);color:var(--red)}
+
+/* ════════ EKRAN 3: KOLEKCJA ════════ */
+#scr-kolekcja{background:var(--bg)}
+#kolBody{flex:1;overflow-y:auto;padding:12px;-webkit-overflow-scrolling:touch}
+#kolHead{font-size:9px;letter-spacing:2px;color:var(--textDim);margin-bottom:10px;
+  display:flex;justify-content:space-between;align-items:center}
+#kolRefresh{background:transparent;border:1px solid var(--border);border-radius:5px;
+  color:var(--textDim);font-family:var(--mono);font-size:8px;padding:5px 9px;cursor:pointer}
+#kolGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.kolCard{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  overflow:hidden;cursor:pointer;transition:border-color .15s}
+.kolCard:active{border-color:var(--accentLt)}
+.kolThumb{width:100%;height:84px;object-fit:cover;display:block;background:#000}
+.kolNoThumb{width:100%;height:84px;display:flex;align-items:center;justify-content:center;
+  font-size:26px;color:var(--border);background:#020604}
+.kolInfo{padding:7px 8px}
+.kolDate{color:var(--white);font-size:9px;letter-spacing:.5px}
+.kolPlace{color:var(--textDim);font-size:8px;margin-top:2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.kolSync{font-size:8px;margin-top:3px}
+.kolSync.local{color:var(--amber)} .kolSync.synced{color:var(--accentLt)}
+.kolSync.cloud{color:var(--blue)}
+.kolEmpty{grid-column:1/-1;text-align:center;color:var(--textDim);padding:40px 0;
+  font-size:11px;line-height:2}
+
+.setCard{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:12px;margin-bottom:10px}
+.setLbl{color:var(--textDim);font-size:8px;letter-spacing:2px;margin-bottom:9px}
+.setField{margin-bottom:8px}
+.setField label{display:block;color:var(--textDim);font-size:8px;letter-spacing:1px;
+  margin-bottom:3px}
+.setField input,.setField textarea{width:100%;background:var(--bg);
+  border:1px solid var(--border);border-radius:4px;padding:7px 8px;color:var(--white);
+  font-family:var(--mono);font-size:11px;outline:none;resize:vertical}
+.setRow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.setRow .sLbl{color:var(--textDim);font-size:8px;letter-spacing:1px;white-space:nowrap}
+#gainVal{color:var(--amber);font-weight:700;font-size:11px;min-width:34px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--accentLt);cursor:pointer}
+.durBtns{display:flex;gap:4px}
+.durBtn{flex:1;padding:6px 2px;background:transparent;border:1px solid var(--border);
+  border-radius:5px;color:var(--textDim);cursor:pointer;font-family:var(--mono);
+  font-size:9px;text-align:center;transition:all .15s}
+.durBtn.sel{border-color:var(--accent);color:var(--accentLt);background:rgba(36,93,60,.2)}
+#gdAuthBtn{width:100%;padding:9px;background:transparent;border:1px solid var(--border);
+  border-radius:6px;color:var(--textDim);cursor:pointer;font-family:var(--mono);
+  font-size:9px;letter-spacing:1px;margin-top:4px;transition:all .2s}
+#gdAuthBtn.ok{border-color:var(--accent);color:var(--accentLt)}
+#gdStatus{font-size:9px;color:var(--textDim);margin-top:6px;text-align:center;min-height:13px}
+#logBox{font-size:9px;color:var(--textDim);white-space:pre-wrap;line-height:1.8;
+  max-height:110px;overflow-y:auto}
+#logBox span{display:block}
+#logBox span.ok{color:var(--accentLt)} #logBox span.err{color:var(--red)}
+#logBox span.warn{color:var(--amber)} #logBox span.info{color:var(--text)}
+
+/* ── NAWIGACJA DOLNA ── */
+#nav{flex-shrink:0;display:flex;border-top:1px solid var(--border);background:var(--bg)}
+#nav button{flex:1;padding:11px 0;background:transparent;border:none;color:var(--textDim);
+  font-family:var(--mono);font-size:10px;letter-spacing:2px;cursor:pointer;
+  border-top:2px solid transparent}
+#nav button.active{color:var(--accentLt);border-top-color:var(--accentLt)}
+
+/* ── PASEK BŁĘDÓW ── */
+#errStrip{position:fixed;top:0;left:0;right:0;z-index:99;display:none;flex-direction:column}
+#errStrip.visible{display:flex}
+.errLine{display:flex;justify-content:space-between;align-items:center;
+  background:rgba(229,57,53,.94);color:#fff;font-size:10px;padding:7px 10px}
+.errLine button{background:transparent;border:none;color:#fff;font-size:13px;cursor:pointer}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border)}
+</style>
+</head>
+<body>
+
+<div id="errStrip"></div>
+
+<div id="statusBar">
+  <span id="netStatus" class="onlineDot">◉ ONLINE</span>
+  <span id="clock">00:00:00</span>
+  <span id="gpsInd">GPS ○</span>
+</div>
+
+<div id="screens">
+
+  <!-- ════════ WIZJER ════════ -->
+  <section id="scr-wizjer" class="screen active">
+    <div id="vfArea">
+      <video id="cam" autoplay playsinline muted></video>
+      <canvas id="spectro" width="640" height="44"></canvas>
+      <div id="dbRead">— dB</div>
+      <button id="flipBtn" title="Przełącz kamerę">⟲</button>
+    </div>
+    <div id="dock">
+      <div id="recTimer"></div>
+      <div id="recHint">JEDEN DOTYK — CHWILA ZOSTAJE ZAPIECZĘTOWANA</div>
+      <div id="dockMid">
+        <div id="ringWrap">
+          <svg id="ringSvg" viewBox="0 0 128 128">
+            <circle class="ringSeg idle" id="seg-miejsce"   cx="64" cy="64" r="58"/>
+            <circle class="ringSeg idle" id="seg-atmosfera" cx="64" cy="64" r="58"/>
+            <circle class="ringSeg idle" id="seg-kosmos"    cx="64" cy="64" r="58"/>
+            <circle class="ringSeg idle" id="seg-zeitgeist" cx="64" cy="64" r="58"/>
+          </svg>
+          <button id="recBtn"><div class="dot"></div></button>
+        </div>
+        <button id="sealBtn" title="Zapieczętuj bez audio (nagranie na zewnętrznym sprzęcie)">📌</button>
+      </div>
+      <div id="ringLegend">
+        <span id="leg-miejsce">MIEJSCE</span>
+        <span id="leg-atmosfera">ATMOSFERA</span>
+        <span id="leg-kosmos">KOSMOS</span>
+        <span id="leg-zeitgeist">ZEITGEIST</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════ KAPSUŁA ════════ -->
+  <section id="scr-kapsula" class="screen">
+    <div id="kapHead">
+      <button id="kapBack">←</button>
+      <div id="kapTitle"></div>
+      <div id="kapLayers">
+        <button class="layerBtn sel" data-layer="opowiesc">OPOWIEŚĆ</button>
+        <button class="layerBtn" data-layer="dzwiek">DŹWIĘK</button>
+      </div>
+    </div>
+    <div id="kapBody"></div>
+  </section>
+
+  <!-- ════════ KOLEKCJA ════════ -->
+  <section id="scr-kolekcja" class="screen">
+    <div id="kolBody">
+      <div id="kolHead">
+        <span id="kolCount">KOLEKCJA — 0 KAPSUŁ</span>
+        <button id="kolRefresh">☁ ODŚWIEŻ Z DRIVE</button>
+      </div>
+      <div id="kolGrid"></div>
+
+      <div class="setCard">
+        <div class="setLbl">USTAWIENIA SESJI</div>
+        <div class="setField"><label>REALIZATOR</label><input id="stRecordist" placeholder="Jan Kowalski"></div>
+        <div class="setField"><label>PROJEKT / KOLEKCJA</label><input id="stProject" placeholder="Puszcza Białowieska 2026"></div>
+        <div class="setField"><label>SIEDLISKO / HABITAT</label><input id="stHabitat" placeholder="las mieszany, brzeg rzeki..."></div>
+        <div class="setField"><label>MIKROFON / REJESTRATOR</label><input id="stMic" placeholder="Wbudowany / Zoom H5..."></div>
+        <div class="setField"><label>URZĄDZENIE</label><input id="stDevice" readonly style="color:var(--textDim)"></div>
+      </div>
+
+      <div class="setCard">
+        <div class="setLbl">AUDIO</div>
+        <div class="setRow"><span class="sLbl">GAIN</span>
+          <input type="range" id="gainCtrl" min="1" max="10" step="0.5" value="3">
+          <span id="gainVal">3.0×</span></div>
+        <div class="setRow"><span class="sLbl">CZAS</span>
+          <div class="durBtns" style="flex:1">
+            <button class="durBtn" data-dur="5">5s</button>
+            <button class="durBtn" data-dur="10">10s</button>
+            <button class="durBtn" data-dur="30">30s</button>
+            <button class="durBtn" data-dur="60">60s</button>
+            <button class="durBtn" data-dur="120">2m</button>
+            <button class="durBtn sel" data-dur="0">RĘCZ.</button>
+          </div></div>
+      </div>
+
+      <div class="setCard">
+        <div class="setLbl">GOOGLE DRIVE — ARCHIWUM KANONICZNE</div>
+        <div class="setField"><label>OAUTH2 CLIENT ID</label><input id="gdClientId" autocomplete="off"></div>
+        <div class="setField"><label>ID FOLDERU GŁÓWNEGO</label><input id="gdFolderId" autocomplete="off"></div>
+        <button id="gdAuthBtn">◉ AUTORYZUJ GOOGLE DRIVE</button>
+        <div id="gdStatus"></div>
+      </div>
+
+      <div class="setCard">
+        <div class="setLbl">DZIENNIK</div>
+        <div id="logBox"><span class="info">Gotowy. Naciśnij REC — reszta stanie się sama.</span></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div id="nav">
+  <button class="navBtn active" data-scr="wizjer">● WIZJER</button>
+  <button class="navBtn" data-scr="kolekcja">◈ KOLEKCJA <span id="navCount"></span></button>
+</div>
+
+<script>
+'use strict';
+/* ════════════════════════════════════════════════════════════════════
+   ZATRZYMAĆ CHWILĘ v2
+   Architektura: PIECZĘĆ (natychmiast, offline) ≠ WZBOGACENIE (async).
+   Drive = archiwum kanoniczne. Telefon = bufor.
+   ════════════════════════════════════════════════════════════════════ */
+
+// ─── STAŁE ────────────────────────────────────────────────────────────
+const GD_CLIENT_ID = '814981759550-jvqdut6alug2v7aa70tt6727u2daq0l6.apps.googleusercontent.com';
+const GD_FOLDER_ID = '1VH70cZ6_5SS4t7BEkh9BiglvBO4nF-Kj';
+
+const NEWS_FEEDS=[
+  {key:'polska',label:'POLSKA',urls:[
+    'https://www.rmf24.pl/feed','https://fakty.interia.pl/feed',
+    'https://wiadomosci.wp.pl/rss.xml','https://rss.gazeta.pl/pub/rss/najwazniejsze.xml']},
+  {key:'europa',label:'EUROPA',urls:[
+    'https://rss.dw.com/rdf/rss-en-eu','https://feeds.bbci.co.uk/news/europe/rss.xml',
+    'https://www.euractiv.com/sections/politics/feed/']},
+  {key:'swiat',label:'ŚWIAT',urls:[
+    'https://feeds.bbci.co.uk/news/world/rss.xml','https://rss.dw.com/rdf/rss-en-all',
+    'https://www.aljazeera.com/xml/rss/all.xml']}
+];
+const CORS_PROXIES=[
+  u=>`https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u=>`https://corsproxy.io/?${encodeURIComponent(u)}`,
+  u=>`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
+];
+const PLANET_PL={Mercury:'Merkury',Venus:'Wenus',Mars:'Mars',Jupiter:'Jowisz',
+  Saturn:'Saturn',Uranus:'Uran',Neptune:'Neptun'};
+
+// ─── NARZĘDZIA ────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const pad=(n,w=2)=>String(Math.floor(n||0)).padStart(w,'0');
+const fmtDur=s=>`${pad(Math.floor(s/60))}:${pad(s%60)}`;
+const fmtSz=b=>b<1048576?`${(b/1024).toFixed(1)} KB`:`${(b/1048576).toFixed(1)} MB`;
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const fetchT=async(url,t=8000,opt={})=>{
+  const c=new AbortController();const id=setTimeout(()=>c.abort(),t);
+  try{return await fetch(url,{...opt,signal:c.signal});}finally{clearTimeout(id);}
+};
+function firstSuccess(promises){
+  return new Promise((res,rej)=>{
+    if(!promises.length){rej(new Error('Brak źródeł'));return;}
+    let n=promises.length;
+    promises.forEach(p=>Promise.resolve(p).then(res,()=>{if(!--n)rej(new Error('Niedostępne'));}));
+  });
+}
+function wDir(d){return['N','NE','E','SE','S','SW','W','NW'][Math.round(d/45)%8];}
+
+function logMsg(msg,cls='info'){
+  const box=$('logBox'),s=document.createElement('span');
+  s.className=cls;s.textContent=msg;box.appendChild(s);
+  box.scrollTop=box.scrollHeight;
+  if(box.children.length>40)box.removeChild(box.firstChild);
+}
+function showErr(msg){
+  const strip=$('errStrip'),div=document.createElement('div');
+  div.className='errLine';
+  div.innerHTML=`<span>⚠ ${esc(msg)}</span><button>✕</button>`;
+  div.querySelector('button').onclick=()=>{div.remove();
+    if(!strip.querySelector('.errLine'))strip.classList.remove('visible');};
+  strip.appendChild(div);strip.classList.add('visible');
+  setTimeout(()=>{div.remove();if(!strip.querySelector('.errLine'))strip.classList.remove('visible');},9000);
+}
+
+// ─── ASTRONOMIA I SYMBOLE (obliczane lokalnie, zero sieci) ────────────
+function moonPhase(date=new Date()){
+  const cycle=29.530588,ph=((((date-new Date('2000-01-06T18:14:00Z'))/86400000)%cycle)+cycle)%cycle;
+  const i=Math.floor(ph/cycle*8);
+  return{emoji:['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'][i],
+    name:['Nów','Sierp wsch.','I kwadra','Garb wsch.','Pełnia','Garb zach.','III kwadra','Sierp zach.'][i],
+    pct:Math.round(ph/cycle*100)};
+}
+function sunTimes(lat,lng,date=new Date()){
+  const R=Math.PI/180,doy=Math.floor((date-new Date(date.getFullYear(),0,0))/86400000);
+  const B=(360/365*(doy-81))*R,decl=23.45*Math.sin(B)*R,cosH=-Math.tan(lat*R)*Math.tan(decl);
+  if(Math.abs(cosH)>1)return null;
+  const H=Math.acos(cosH)/R,eot=(9.87*Math.sin(2*B)-7.53*Math.cos(B)-1.5*Math.sin(B))/60,off=lng/15;
+  const f=h=>`${pad(Math.floor(((h%24)+24)%24))}:${pad((((h%1)+1)%1)*60)}`;
+  return{sunrise:f(12-H/15-eot+off),sunset:f(12+H/15-eot+off)};
+}
+function timeDetails(date){
+  const m=date.getMonth()+1,h=date.getHours();
+  return{season:m>=3&&m<=5?'Wiosna':m>=6&&m<=8?'Lato':m>=9&&m<=11?'Jesień':'Zima',
+    timeOfDay:h>=5&&h<8?'Świt':h>=8&&h<16?'Dzień':h>=16&&h<20?'Zmierzch':'Noc'};
+}
+function zodiacSign(date=new Date()){
+  const m=date.getMonth()+1,d=date.getDate();
+  if((m===12&&d>=22)||(m===1&&d<=19))return{name:'Koziorożec',symbol:'♑'};
+  if(m===1||(m===2&&d<=18))return{name:'Wodnik',symbol:'♒'};
+  if(m===2||(m===3&&d<=20))return{name:'Ryby',symbol:'♓'};
+  if(m===3||(m===4&&d<=19))return{name:'Baran',symbol:'♈'};
+  if(m===4||(m===5&&d<=20))return{name:'Byk',symbol:'♉'};
+  if(m===5||(m===6&&d<=20))return{name:'Bliźnięta',symbol:'♊'};
+  if(m===6||(m===7&&d<=22))return{name:'Rak',symbol:'♋'};
+  if(m===7||(m===8&&d<=22))return{name:'Lew',symbol:'♌'};
+  if(m===8||(m===9&&d<=22))return{name:'Panna',symbol:'♍'};
+  if(m===9||(m===10&&d<=22))return{name:'Waga',symbol:'♎'};
+  if(m===10||(m===11&&d<=21))return{name:'Skorpion',symbol:'♏'};
+  return{name:'Strzelec',symbol:'♐'};
+}
+function chineseYear(date=new Date()){
+  const A=[{n:'Szczur',e:'🐀'},{n:'Wół',e:'🐂'},{n:'Tygrys',e:'🐯'},{n:'Królik',e:'🐇'},
+    {n:'Smok',e:'🐉'},{n:'Wąż',e:'🐍'},{n:'Koń',e:'🐎'},{n:'Koza',e:'🐐'},
+    {n:'Małpa',e:'🐒'},{n:'Kogut',e:'🐓'},{n:'Pies',e:'🐕'},{n:'Świnia',e:'🐖'}];
+  const EL=['Metal','Metal','Woda','Woda','Drewno','Drewno','Ogień','Ogień','Ziemia','Ziemia'];
+  const CNY={2020:[1,25],2021:[2,12],2022:[2,1],2023:[1,22],2024:[2,10],
+    2025:[1,29],2026:[2,17],2027:[2,6],2028:[1,26],2029:[2,13]};
+  let y=date.getFullYear();
+  const m=date.getMonth()+1,d=date.getDate(),e=CNY[y];
+  if(e&&(m<e[0]||(m===e[0]&&d<e[1])))y--;
+  return{animal:A[((y-2020)%12+12)%12].n,emoji:A[((y-2020)%12+12)%12].e,
+    element:EL[((y-2020)%10+10)%10],year:y};
+}
+// Zdanie-pieczęć: odmiana przez przypadki
+const MOON_GEN={'Nów':'Nowiu','Sierp wsch.':'wschodzącego Sierpa','I kwadra':'Pierwszej Kwadry',
+  'Garb wsch.':'wschodzącego Garbu','Pełnia':'Pełni','Garb zach.':'zachodzącego Garbu',
+  'III kwadra':'Trzeciej Kwadry','Sierp zach.':'zachodzącego Sierpa'};
+const ZOD_LOC={'Baran':'Baranie','Byk':'Byku','Bliźnięta':'Bliźniętach','Rak':'Raku',
+  'Lew':'Lwie','Panna':'Pannie','Waga':'Wadze','Skorpion':'Skorpionie','Strzelec':'Strzelcu',
+  'Koziorożec':'Koziorożcu','Wodnik':'Wodniku','Ryby':'Rybach'};
+const ELEM_GEN={'Ogień':'Ognistego','Woda':'Wodnego','Drewno':'Drewnianego',
+  'Metal':'Metalowego','Ziemia':'Ziemnego'};
+const ANIM_GEN={'Szczur':'Szczura','Wół':'Wołu','Tygrys':'Tygrysa','Królik':'Królika',
+  'Smok':'Smoka','Wąż':'Węża','Koń':'Konia','Koza':'Kozy','Małpa':'Małpy','Kogut':'Koguta',
+  'Pies':'Psa','Świnia':'Świni'};
+function sealSentence(date){
+  const td=timeDetails(date),moon=moonPhase(date),z=zodiacSign(date),cy=chineseYear(date);
+  return`${td.timeOfDay} ${MOON_GEN[moon.name]||moon.name} w ${ZOD_LOC[z.name]||z.name}, `+
+    `${td.season.toLowerCase()} roku ${ELEM_GEN[cy.element]||cy.element} ${ANIM_GEN[cy.animal]||cy.animal}`;
+}
+
+// ─── ADRES ────────────────────────────────────────────────────────────
+const CONTINENT_MAP={pl:'Europa Środkowa',de:'Europa Środkowa',cz:'Europa Środkowa',
+  sk:'Europa Środkowa',at:'Europa Środkowa',ch:'Europa Środkowa',hu:'Europa Środkowa',
+  fr:'Europa Zachodnia',gb:'Europa Zachodnia',ie:'Europa Zachodnia',be:'Europa Zachodnia',
+  nl:'Europa Zachodnia',lu:'Europa Zachodnia',es:'Europa Południowa',pt:'Europa Południowa',
+  it:'Europa Południowa',gr:'Europa Południowa',hr:'Europa Południowa',si:'Europa Południowa',
+  rs:'Europa Południowa',se:'Europa Północna',no:'Europa Północna',fi:'Europa Północna',
+  dk:'Europa Północna',ee:'Europa Północna',lv:'Europa Północna',lt:'Europa Północna',
+  is:'Europa Północna',ru:'Europa Wschodnia',ua:'Europa Wschodnia',by:'Europa Wschodnia',
+  md:'Europa Wschodnia',ro:'Europa Wschodnia',bg:'Europa Wschodnia',us:'Ameryka Północna',
+  ca:'Ameryka Północna',mx:'Ameryka Środkowa',br:'Ameryka Południowa',ar:'Ameryka Południowa',
+  cl:'Ameryka Południowa',co:'Ameryka Południowa',cn:'Azja Wschodnia',jp:'Azja Wschodnia',
+  kr:'Azja Wschodnia',tw:'Azja Wschodnia',in:'Azja Południowa',pk:'Azja Południowa',
+  bd:'Azja Południowa',tr:'Bliski Wschód',sa:'Bliski Wschód',ae:'Bliski Wschód',
+  il:'Bliski Wschód',ir:'Bliski Wschód',id:'Azja Pd.-Wsch.',th:'Azja Pd.-Wsch.',
+  vn:'Azja Pd.-Wsch.',sg:'Azja Pd.-Wsch.',za:'Afryka Południowa',ng:'Afryka Zachodnia',
+  eg:'Afryka Północna',ke:'Afryka Wschodnia',au:'Oceania',nz:'Oceania'};
+function parseAddress(raw){
+  return{neighbourhood:raw.neighbourhood||raw.quarter||null,suburb:raw.suburb||null,
+    district:raw.district||raw.city_district||raw.borough||null,
+    city:raw.city||raw.town||raw.village||raw.hamlet||null,
+    county:raw.county||raw.municipality||null,region:raw.state||raw.region||null,
+    country:raw.country||null,country_code:(raw.country_code||'').toUpperCase()||null,
+    continent_region:CONTINENT_MAP[(raw.country_code||'').toLowerCase()]||null};
+}
+
+// ─── MAGAZYN: localStorage (metadane) + IndexedDB (media) ─────────────
+let moments=[];        // tablica obiektów moment.json (lokalny bufor)
+let driveOnly=[];      // kapsuły widoczne tylko na Drive
+function loadMoments(){try{moments=JSON.parse(localStorage.getItem('zc2_moments')||'[]');}catch{moments=[];}}
+function saveMoments(){
+  try{localStorage.setItem('zc2_moments',JSON.stringify(moments));}
+  catch(e){showErr('Pamięć lokalna pełna — zsynchronizuj z Drive i usuń stare kapsuły');}
+}
+const SETTINGS_KEYS=['stRecordist','stProject','stHabitat','stMic'];
+function loadSettings(){
+  SETTINGS_KEYS.forEach(k=>{$(k).value=localStorage.getItem('zc2_'+k)||'';});
+  $('gainCtrl').value=localStorage.getItem('zc2_gain')||'3';
+  $('gainVal').textContent=parseFloat($('gainCtrl').value).toFixed(1)+'×';
+  recDuration=parseInt(localStorage.getItem('zc2_dur')||'0');
+  document.querySelectorAll('.durBtn').forEach(b=>
+    b.classList.toggle('sel',parseInt(b.dataset.dur)===recDuration));
+}
+SETTINGS_KEYS.forEach(k=>{});
+
+let idb=null;
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const rq=indexedDB.open('zc2',1);
+    rq.onupgradeneeded=()=>rq.result.createObjectStore('media');
+    rq.onsuccess=()=>{idb=rq.result;res(idb);};
+    rq.onerror=()=>rej(rq.error);
+  });
+}
+function idbPut(key,blob){
+  return new Promise((res,rej)=>{
+    const tx=idb.transaction('media','readwrite');
+    tx.objectStore('media').put(blob,key);
+    tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
+  });
+}
+function idbGet(key){
+  return new Promise((res,rej)=>{
+    const rq=idb.transaction('media').objectStore('media').get(key);
+    rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);
+  });
+}
+function idbDel(key){
+  return new Promise((res,rej)=>{
+    const tx=idb.transaction('media','readwrite');
+    tx.objectStore('media').delete(key);
+    tx.oncomplete=res;tx.onerror=()=>rej(tx.error);
+  });
+}
+
+// ─── STAN GLOBALNY ────────────────────────────────────────────────────
+let mediaStream=null,audioCtx=null,analyser=null,gainNode=null,mediaRecorder=null;
+let audioChunks=[],isRecording=false,recSeconds=0,recTimerInt=null,recDuration=0;
+let facing='environment';
+let dbSamples=[],dbPeak=-Infinity;
+let currentRecMoment=null;   // moment aktualnie nagrywany
+let gdToken=null;
+
+// ─── EKRANY / NAWIGACJA ───────────────────────────────────────────────
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('scr-'+name).classList.add('active');
+  document.querySelectorAll('.navBtn').forEach(b=>
+    b.classList.toggle('active',b.dataset.scr===name));
+  if(name==='kolekcja')renderKolekcja();
+}
+document.querySelectorAll('.navBtn').forEach(b=>
+  b.addEventListener('click',()=>showScreen(b.dataset.scr)));
+$('kapBack').addEventListener('click',()=>showScreen('kolekcja'));
+
+// ─── ZEGAR / SIEĆ ─────────────────────────────────────────────────────
+function tick(){const d=new Date();
+  $('clock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>pad(n)).join(':');}
+tick();setInterval(tick,1000);
+function netUpd(){const on=navigator.onLine;
+  $('netStatus').textContent=on?'◉ ONLINE':'○ OFFLINE';
+  $('netStatus').className=on?'onlineDot':'offlineDot';}
+netUpd();
+window.addEventListener('online',()=>{netUpd();backfillAll();});
+window.addEventListener('offline',netUpd);
+
+// ─── PIERŚCIEŃ KONTEKSTU ──────────────────────────────────────────────
+// 4 segmenty po ~82° z przerwami, na okręgu r=58 (obwód ~364.4)
+(function initRing(){
+  const C=2*Math.PI*58,seg=C/4-8;
+  ['miejsce','atmosfera','kosmos','zeitgeist'].forEach((k,i)=>{
+    const el=$('seg-'+k);
+    el.style.strokeDasharray=`${seg} ${C-seg}`;
+    el.style.strokeDashoffset=String(-i*C/4-4);
+  });
+})();
+function ringSet(layer,state){
+  const el=$('seg-'+layer),leg=$('leg-'+layer);
+  if(el)el.className.baseVal=`ringSeg ${state}`;
+  if(leg)leg.className=state;
+}
+function ringReset(){['miejsce','atmosfera','kosmos','zeitgeist'].forEach(k=>ringSet(k,'idle'));}
+
+// ─── MEDIA ────────────────────────────────────────────────────────────
+function getMime(){
+  for(const t of['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4'])
+    if(window.MediaRecorder&&MediaRecorder.isTypeSupported(t))return t;
+  return'';
+}
+async function initMedia(){
+  try{
+    if(mediaStream)mediaStream.getTracks().forEach(t=>t.stop());
+    mediaStream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:facing},
+      audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,
+        channelCount:2,sampleRate:48000}
+    });
+    $('cam').srcObject=mediaStream;
+    const aStream=new MediaStream(mediaStream.getAudioTracks());
+    if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const src=audioCtx.createMediaStreamSource(aStream);
+    gainNode=audioCtx.createGain();gainNode.gain.value=parseFloat($('gainCtrl').value);
+    analyser=audioCtx.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.72;
+    const dest=audioCtx.createMediaStreamDestination();
+    src.connect(gainNode);gainNode.connect(analyser);gainNode.connect(dest);
+    const mime=getMime();
+    mediaRecorder=new MediaRecorder(dest.stream,mime?{mimeType:mime}:{});
+    mediaRecorder.ondataavailable=e=>{if(e.data.size)audioChunks.push(e.data);};
+    mediaRecorder.onstop=finalizeAudio;
+    startSpectro();
+    logMsg('✓ Kamera i mikrofon gotowe','ok');
+  }catch(e){showErr('Media: '+e.message);logMsg('✗ Media: '+e.message,'err');}
+}
+$('flipBtn').addEventListener('click',()=>{
+  facing=facing==='environment'?'user':'environment';initMedia();
+});
+$('gainCtrl').addEventListener('input',()=>{
+  const v=parseFloat($('gainCtrl').value);
+  $('gainVal').textContent=v.toFixed(1)+'×';
+  if(gainNode)gainNode.gain.value=v;
+  localStorage.setItem('zc2_gain',String(v));
+});
+document.querySelectorAll('.durBtn').forEach(btn=>btn.addEventListener('click',()=>{
+  document.querySelectorAll('.durBtn').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  recDuration=parseInt(btn.dataset.dur)||0;
+  localStorage.setItem('zc2_dur',String(recDuration));
+}));
+SETTINGS_KEYS.forEach(k=>$(k).addEventListener('change',()=>
+  localStorage.setItem('zc2_'+k,$(k).value)));
+
+// ─── SPEKTROGRAM + dB ─────────────────────────────────────────────────
+function startSpectro(){
+  const cvs=$('spectro'),ctx=cvs.getContext('2d',{willReadFrequently:true});
+  const freq=new Uint8Array(analyser.frequencyBinCount);
+  const time=new Float32Array(analyser.fftSize);
+  let frame=0;
+  (function draw(){
+    requestAnimationFrame(draw);
+    if(!analyser)return;
+    frame++;
+    analyser.getByteFrequencyData(freq);
+    // przesuń w lewo o 2px, dorysuj kolumnę
+    const img=ctx.getImageData(2,0,cvs.width-2,cvs.height);
+    ctx.putImageData(img,0,0);
+    for(let y=0;y<cvs.height;y++){
+      const fi=Math.floor((1-y/cvs.height)*freq.length*0.72);
+      const v=freq[fi]/255;
+      ctx.fillStyle=v<0.02?'rgba(3,8,5,1)':
+        `rgba(${Math.round(40+v*215)},${Math.round(160+v*95)},${Math.round(90+v*60)},${0.25+v*0.75})`;
+      ctx.fillRect(cvs.width-2,y,2,1);
+    }
+    // dB co ~10 klatek
+    if(frame%10===0){
+      analyser.getFloatTimeDomainData(time);
+      let sum=0;for(let i=0;i<time.length;i++)sum+=time[i]*time[i];
+      const rms=Math.sqrt(sum/time.length);
+      const db=rms>0?Math.max(-90,20*Math.log10(rms)):-90;
+      $('dbRead').textContent=db.toFixed(1)+' dBFS';
+      if(isRecording){dbSamples.push(db);if(db>dbPeak)dbPeak=db;}
+    }
+  })();
+}
+
+// ─── PIECZĘĆ — serce aplikacji ────────────────────────────────────────
+function newMoment(type){
+  const ts=new Date();
+  const fn=`CHWILA_${ts.getFullYear()}${pad(ts.getMonth()+1)}${pad(ts.getDate())}_${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
+  const td=timeDetails(ts),moon=moonPhase(ts),z=zodiacSign(ts),cy=chineseYear(ts);
+  return{
+    schema_version:2,id:fn,type,
+    sealed_at:ts.toISOString(),enriched_at:null,
+    note:'',
+    capture:{duration_s:0,mime:null,size_bytes:0,gain:$('gainCtrl').value+'x',
+      avg_db:null,peak_db:null},
+    session:{recordist:$('stRecordist').value,project:$('stProject').value,
+      habitat:$('stHabitat').value,tech_notes:'',mic:$('stMic').value,
+      device:$('stDevice').value},
+    mikro:{time_of_day:td.timeOfDay,device_angle:null},
+    mezzo:{gps:null,address:null,location_name:'',wiki_nearby:[]},
+    makro:{weather:null,season:td.season,sun:null,planets_visible:[],
+      space_weather:null,earthquakes:null,flights_overhead:[]},
+    zeitgeist:{polska:[],europa:[],swiat:[],fetched_at:null},
+    symbol:{moon:{emoji:moon.emoji,name:moon.name,pct:moon.pct},
+      zodiac:{name:z.name,symbol:z.symbol},
+      chinese_year:{animal:cy.animal,emoji:cy.emoji,element:cy.element,year:cy.year},
+      seal_sentence:sealSentence(ts)},
+    drive:{folder_id:null,json_id:null,audio_id:null,photo_id:null,synced_at:null},
+    _hasAudio:false,_hasPhoto:false
+  };
+}
+async function snapPhoto(m){
+  const cam=$('cam');
+  if(!cam.videoWidth)return;
+  const cv=document.createElement('canvas');
+  cv.width=cam.videoWidth;cv.height=cam.videoHeight;
+  cv.getContext('2d').drawImage(cam,0,0);
+  const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.92));
+  if(blob){await idbPut(m.id+'_photo',blob);m._hasPhoto=true;}
+}
+function sealGPS(m){
+  if(!navigator.geolocation){enrich(m);return;}
+  $('gpsInd').textContent='GPS ◌';$('gpsInd').className='loading';
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const{latitude:lat,longitude:lng,altitude:alt,accuracy:acc}=pos.coords;
+    m.mezzo.gps={lat,lng,alt,accuracy:acc};
+    const st=sunTimes(lat,lng,new Date(m.sealed_at));
+    if(st)m.makro.sun=st;
+    saveMoments();
+    $('gpsInd').textContent='GPS ▲';$('gpsInd').className='ok';
+    logMsg(`📡 GPS ${lat.toFixed(5)}, ${lng.toFixed(5)} ±${Math.round(acc)}m`,'ok');
+    enrich(m,true);
+  },err=>{
+    $('gpsInd').textContent='GPS ✕';$('gpsInd').className='error';
+    logMsg('✗ GPS: '+({1:'brak uprawnień',2:'niedostępny',3:'timeout'}[err.code]||err.message),'err');
+    enrich(m,true); // zeitgeist i tak się pobierze
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:20000});
+}
+
+// ─── NAGRYWANIE ───────────────────────────────────────────────────────
+$('recBtn').addEventListener('click',()=>{
+  if(!mediaRecorder){showErr('Media niegotowe — odśwież stronę');return;}
+  if(isRecording)stopRec();else startRec();
+});
+function startRec(){
+  if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  audioChunks=[];dbSamples=[];dbPeak=-Infinity;
+  currentRecMoment=newMoment('audio');
+  moments.unshift(currentRecMoment);saveMoments();updNavCount();
+  snapPhoto(currentRecMoment);
+  sealGPS(currentRecMoment);
+  ringReset();
+  mediaRecorder.start(200);
+  isRecording=true;recSeconds=0;
+  $('recBtn').classList.add('recording');
+  $('recTimer').textContent='● '+fmtDur(0);
+  $('recHint').textContent='NAGRYWAM — KONTEKST SKŁADA SIĘ W TLE';
+  recTimerInt=setInterval(()=>{
+    recSeconds++;
+    $('recTimer').textContent='● '+fmtDur(recSeconds);
+    if(recDuration>0&&recSeconds>=recDuration)stopRec();
+  },1000);
+  logMsg('⏺ '+currentRecMoment.id,'warn');
+}
+function stopRec(){
+  if(!isRecording)return;
+  clearInterval(recTimerInt);
+  mediaRecorder.stop();
+  isRecording=false;
+  $('recBtn').classList.remove('recording');
+  $('recTimer').textContent='';
+  $('recHint').textContent='JEDEN DOTYK — CHWILA ZOSTAJE ZAPIECZĘTOWANA';
+}
+async function finalizeAudio(){
+  const m=currentRecMoment;if(!m)return;
+  const mime=getMime();
+  const blob=new Blob(audioChunks,{type:mime||'audio/webm'});
+  await idbPut(m.id+'_audio',blob);
+  m._hasAudio=true;
+  m.capture.duration_s=recSeconds;
+  m.capture.mime=mime||'audio/webm';
+  m.capture.size_bytes=blob.size;
+  if(dbSamples.length){
+    m.capture.avg_db=+(dbSamples.reduce((a,b)=>a+b,0)/dbSamples.length).toFixed(1);
+    m.capture.peak_db=+dbPeak.toFixed(1);
+  }
+  saveMoments();
+  logMsg(`✓ ${m.id} (${fmtDur(recSeconds)}, ${fmtSz(blob.size)})`,'ok');
+  maybeAutoUpload(m);
+}
+
+// ─── PIECZĘĆ BEZ AUDIO (zewnętrzny rejestrator) ───────────────────────
+$('sealBtn').addEventListener('click',async()=>{
+  const btn=$('sealBtn');
+  btn.className='busy';
+  const m=newMoment('metadata_only');
+  moments.unshift(m);saveMoments();updNavCount();
+  await snapPhoto(m);
+  sealGPS(m);
+  ringReset();
+  logMsg('📌 '+m.id+' (pieczęć bez audio)','ok');
+  btn.className='done';btn.textContent='✓';
+  setTimeout(()=>{btn.className='';btn.textContent='📌';},2500);
+});
+
+// ─── WZBOGACENIE — kontekst dokleja się do pieczęci ───────────────────
+async function enrich(m,live=false){
+  const gps=m.mezzo.gps;
+  const when=new Date(m.sealed_at);
+  const upd=(layer,state)=>{if(live)ringSet(layer,state);};
+
+  const jobs=[];
+
+  // ZEITGEIST — nie wymaga GPS; tylko dla świeżych chwil (newsów nie cofniemy)
+  const fresh=(Date.now()-when.getTime())<3600000*3;
+  if(fresh&&!m.zeitgeist.fetched_at){
+    upd('zeitgeist','loading');
+    jobs.push(fetchNews().then(nw=>{
+      m.zeitgeist=nw;upd('zeitgeist','ok');
+    }).catch(()=>upd('zeitgeist','err')));
+  }else if(m.zeitgeist.fetched_at)upd('zeitgeist','ok');
+
+  if(gps){
+    const{lat,lng}=gps;
+    // MIEJSCE = adres + wikipedia
+    upd('miejsce','loading');
+    jobs.push(Promise.allSettled([fetchNominatim(lat,lng),fetchWiki(lat,lng)]).then(([nom,wiki])=>{
+      let ok=false;
+      if(nom.status==='fulfilled'){
+        m.mezzo.address=parseAddress(nom.value.address||{});
+        m.mezzo.location_name=(nom.value.display_name||'').split(',').slice(0,4).join(', ');
+        ok=true;
+      }
+      if(wiki.status==='fulfilled'&&wiki.value)m.mezzo.wiki_nearby=wiki.value;
+      upd('miejsce',ok?'ok':'err');
+    }));
+    // ATMOSFERA = pogoda (bieżąca lub historyczna)
+    upd('atmosfera','loading');
+    jobs.push(fetchWeatherFor(lat,lng,when).then(wx=>{
+      m.makro.weather=wx;upd('atmosfera','ok');
+    }).catch(()=>upd('atmosfera','err')));
+    // KOSMOS = planety + NOAA + USGS + samoloty
+    upd('kosmos','loading');
+    jobs.push(Promise.allSettled([
+      fetchPlanets(lat,lng,when),fetchSpace(),fetchEq(lat,lng,when),
+      fresh?fetchFlights(lat,lng):Promise.reject(new Error('minęło'))
+    ]).then(([pl,sp,eq,fl])=>{
+      if(pl.status==='fulfilled')m.makro.planets_visible=pl.value;
+      if(sp.status==='fulfilled')m.makro.space_weather=sp.value;
+      if(eq.status==='fulfilled')m.makro.earthquakes=eq.value;
+      if(fl.status==='fulfilled')m.makro.flights_overhead=fl.value;
+      upd('kosmos',(pl.status==='fulfilled'||sp.status==='fulfilled')?'ok':'err');
+    }));
+  }
+
+  await Promise.allSettled(jobs);
+  // rdzeń wzbogacenia = adres + pogoda (jeśli był GPS); bez GPS — sama próba wystarczy
+  if(!gps||(m.mezzo.address&&m.makro.weather))m.enriched_at=new Date().toISOString();
+  saveMoments();
+  if(live)logMsg('✓ Kontekst '+m.id,'ok');
+  maybeAutoUpload(m);
+}
+
+// przy starcie: dopełnij kapsuły, którym brakuje kontekstu
+async function backfillAll(){
+  if(!navigator.onLine)return;
+  for(const m of moments){
+    if(!m.enriched_at&&m.mezzo.gps){
+      logMsg('⏳ Dopełniam '+m.id,'warn');
+      await enrich(m,false);
+    }
+  }
+}
+
+// ─── API KONTEKSTOWE ──────────────────────────────────────────────────
+async function fetchNominatim(lat,lng){
+  const r=await fetchT(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=18&accept-language=pl`,8000);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function fetchWiki(lat,lng){
+  const r=await fetchT(`https://pl.wikipedia.org/w/api.php?action=query&list=geosearch&gscoord=${lat}|${lng}&gsradius=1000&gslimit=5&format=json&origin=*`,8000);
+  const d=await r.json();
+  return d.query?.geosearch?.map(i=>i.title)||[];
+}
+async function fetchWeatherFor(lat,lng,when){
+  const ageDays=(Date.now()-when.getTime())/86400000;
+  const H='temperature_2m,relative_humidity_2m,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m';
+  if(ageDays<0.05){ // świeża chwila — dane bieżące
+    const r=await fetchT(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=${H}&wind_speed_unit=ms&timezone=auto`,8000);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const c=(await r.json()).current;
+    return{temp:c.temperature_2m,humidity:c.relative_humidity_2m,
+      pressure:Math.round(c.pressure_msl),windSpeed:c.wind_speed_10m,
+      windDir:wDir(c.wind_direction_10m),clouds:c.cloud_cover,precip:c.precipitation};
+  }
+  // backfill — godzinowe dane historyczne
+  const base=ageDays<=6.5
+    ?`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&past_days=7&hourly=${H}&wind_speed_unit=ms&timezone=auto`
+    :`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${when.toISOString().slice(0,10)}&end_date=${when.toISOString().slice(0,10)}&hourly=${H}&wind_speed_unit=ms&timezone=auto`;
+  const r=await fetchT(base,9000);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const h=(await r.json()).hourly;
+  if(!h||!h.time)throw new Error('brak danych');
+  // znajdź najbliższą godzinę
+  let bi=0,bd=Infinity;
+  h.time.forEach((t,i)=>{const d=Math.abs(new Date(t)-when);if(d<bd){bd=d;bi=i;}});
+  return{temp:h.temperature_2m[bi],humidity:h.relative_humidity_2m[bi],
+    pressure:Math.round(h.pressure_msl[bi]),windSpeed:h.wind_speed_10m[bi],
+    windDir:wDir(h.wind_direction_10m[bi]),clouds:h.cloud_cover[bi],precip:h.precipitation[bi]};
+}
+async function fetchPlanets(lat,lng,when){
+  let url=`https://api.visibleplanets.dev/v3?latitude=${lat}&longitude=${lng}`;
+  const age=Date.now()-when.getTime();
+  if(age>600000)url+=`&time=${encodeURIComponent(when.toISOString())}`;
+  const r=await fetchT(url,8000);
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const d=await r.json();
+  return(d.data||[])
+    .filter(p=>PLANET_PL[p.name]&&p.aboveHorizon!==false)
+    .map(p=>({name:PLANET_PL[p.name],constellation:p.constellation||'',
+      altitude_deg:Math.round(p.altitude||0),magnitude:p.magnitude!=null?+p.magnitude.toFixed(1):null}));
+}
+async function fetchSpace(){
+  const r=await fetchT('https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json',8000);
+  const d=await r.json();
+  if(d&&d.length>1){const last=d[d.length-1];
+    if(last&&last[1]!==undefined)return`Indeks Kp = ${last[1]}`;}
+  return null;
+}
+async function fetchEq(lat,lng,when){
+  const from=new Date(when);from.setDate(from.getDate()-30);
+  const r=await fetchT(`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=${lat}&longitude=${lng}&maxradiuskm=200&starttime=${from.toISOString().slice(0,10)}&endtime=${new Date(when.getTime()+86400000).toISOString().slice(0,10)}&limit=1&orderby=time`,8000);
+  const d=await r.json();
+  if(d.features?.length)return`Mag ${d.features[0].properties.mag}, ${d.features[0].properties.place}`;
+  return'Brak wstrząsów (200 km / 30 dni)';
+}
+async function fetchFlights(lat,lng){
+  const b=0.3;
+  const r=await fetchT(`https://opensky-network.org/api/states/all?lamin=${lat-b}&lomin=${lng-b}&lamax=${lat+b}&lomax=${lng+b}`,8000);
+  const d=await r.json();
+  return(d.states||[]).slice(0,8).map(s=>({callsign:(s[1]||'').trim()||'?',
+    alt_m:s[7]!=null?Math.round(s[7]):null,country:s[2]||''}));
+}
+
+// ─── NEWSY (RSS przez proxy, najszybszy wygrywa) ──────────────────────
+function parseRssXml(xml){
+  const doc=new DOMParser().parseFromString(xml,'text/xml');
+  if(doc.querySelector('parsererror'))throw new Error('Zły XML');
+  const isAtom=doc.querySelector('feed entry')!==null;
+  const items=[...doc.querySelectorAll(isAtom?'entry':'item')].map(el=>({
+    title:(el.querySelector('title')?.textContent||'').trim()
+  })).filter(i=>i.title);
+  if(!items.length)throw new Error('Feed pusty');
+  return items;
+}
+async function fetchRss(urls,count=4){
+  for(let pi=0;pi<CORS_PROXIES.length;pi++){
+    try{
+      return await firstSuccess(urls.map(async u=>{
+        const r=await fetchT(CORS_PROXIES[pi](u),10000);
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        const t=await r.text();
+        if(!t||t.length<100)throw new Error('Pusto');
+        return parseRssXml(t).slice(0,count).map(i=>i.title);
+      }));
+    }catch(e){/* następne proxy */}
+  }
+  throw new Error('RSS niedostępne');
+}
+async function fetchNews(){
+  const res=await Promise.allSettled(NEWS_FEEDS.map(f=>fetchRss(f.urls)));
+  const out={polska:[],europa:[],swiat:[],fetched_at:new Date().toISOString()};
+  res.forEach((r,i)=>{if(r.status==='fulfilled')out[NEWS_FEEDS[i].key]=r.value;});
+  if(!out.polska.length&&!out.europa.length&&!out.swiat.length)throw new Error('Brak newsów');
+  return out;
+}
+
+// ─── GOOGLE DRIVE — ARCHIWUM KANONICZNE ───────────────────────────────
+[['gdClientId',GD_CLIENT_ID],['gdFolderId',GD_FOLDER_ID]].forEach(([id,def])=>{
+  const el=$(id);
+  el.value=def||localStorage.getItem('zc2_'+id)||'';
+  if(def){el.setAttribute('readonly','');el.style.color='var(--textDim)';}
+  el.addEventListener('change',()=>{if(!def)localStorage.setItem('zc2_'+id,el.value.trim());});
+});
+function gdRoot(){return GD_FOLDER_ID||$('gdFolderId').value.trim();}
+function loadGIS(){
+  return new Promise((res,rej)=>{
+    if(window.google?.accounts?.oauth2){res();return;}
+    const s=document.createElement('script');
+    s.src='https://accounts.google.com/gsi/client';
+    s.onload=res;s.onerror=()=>rej(new Error('Nie można załadować Google Identity'));
+    document.head.appendChild(s);
+  });
+}
+async function gdAuth(){
+  await loadGIS();
+  const cid=GD_CLIENT_ID||$('gdClientId').value.trim();
+  if(!cid)throw new Error('Brak Client ID');
+  return new Promise((res,rej)=>{
+    const tc=google.accounts.oauth2.initTokenClient({
+      client_id:cid,
+      scope:'https://www.googleapis.com/auth/drive.file',
+      callback:t=>{
+        if(t.error){rej(new Error(t.error));return;}
+        gdToken=t;
+        $('gdAuthBtn').textContent='✓ POŁĄCZONO Z DRIVE';
+        $('gdAuthBtn').className='ok';
+        $('gdStatus').textContent='Token aktywny ~60 min';
+        res(t);
+      }
+    });
+    tc.requestAccessToken();
+  });
+}
+$('gdAuthBtn').addEventListener('click',async()=>{
+  try{await gdAuth();refreshDriveList();}catch(e){showErr('Drive auth: '+e.message);}
+});
+async function gdFetch(url,opt={}){
+  const r=await fetchT(url,20000,{...opt,
+    headers:{Authorization:'Bearer '+gdToken.access_token,...(opt.headers||{})}});
+  if(r.status===401){gdToken=null;
+    $('gdAuthBtn').textContent='◉ AUTORYZUJ GOOGLE DRIVE';$('gdAuthBtn').className='';
+    throw new Error('Token wygasł — autoryzuj ponownie');}
+  if(!r.ok)throw new Error('Drive HTTP '+r.status);
+  return r;
+}
+async function gdUploadFile(name,blob,parentId,existingId=null){
+  const meta=existingId?{}:{name,parents:[parentId]};
+  const form=new FormData();
+  form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  form.append('file',blob);
+  const url=existingId
+    ?`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
+    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  const r=await gdFetch(url,{method:existingId?'PATCH':'POST',body:form});
+  return r.json();
+}
+async function uploadMoment(m,quiet=false){
+  if(!gdToken){if(!quiet)showErr('Najpierw autoryzuj Drive w KOLEKCJI');return false;}
+  try{
+    if(!m.drive.folder_id){
+      const body={name:m.id,mimeType:'application/vnd.google-apps.folder'};
+      const root=gdRoot();if(root)body.parents=[root];
+      const r=await gdFetch('https://www.googleapis.com/drive/v3/files',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)});
+      m.drive.folder_id=(await r.json()).id;
+    }
+    // moment.json (bez pól roboczych)
+    const clean={...m};delete clean._hasAudio;delete clean._hasPhoto;
+    const jf=await gdUploadFile('moment.json',
+      new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),
+      m.drive.folder_id,m.drive.json_id);
+    m.drive.json_id=jf.id;
+    // audio
+    if(m._hasAudio&&!m.drive.audio_id){
+      const blob=await idbGet(m.id+'_audio');
+      if(blob){
+        const ext=(m.capture.mime||'').includes('mp4')?'m4a':
+          (m.capture.mime||'').includes('ogg')?'ogg':'webm';
+        const af=await gdUploadFile('audio.'+ext,blob,m.drive.folder_id);
+        m.drive.audio_id=af.id;
+      }
+    }
+    // foto
+    if(m._hasPhoto&&!m.drive.photo_id){
+      const blob=await idbGet(m.id+'_photo');
+      if(blob){const pf=await gdUploadFile('photo.jpg',blob,m.drive.folder_id);
+        m.drive.photo_id=pf.id;}
+    }
+    m.drive.synced_at=new Date().toISOString();
+    saveMoments();
+    logMsg('☁ '+m.id+' → Drive','ok');
+    return true;
+  }catch(e){
+    if(!quiet){showErr('Drive: '+e.message);}
+    logMsg('✗ Drive '+m.id+': '+e.message,'err');
+    return false;
+  }
+}
+function maybeAutoUpload(m){
+  // auto-synchronizacja: tylko gdy token żywy i wzbogacenie zakończone
+  if(gdToken&&navigator.onLine&&m.enriched_at&&
+     (m.type==='metadata_only'||m._hasAudio))uploadMoment(m,true).then(()=>renderKolekcjaSoft());
+}
+async function refreshDriveList(){
+  if(!gdToken)return;
+  const root=gdRoot();if(!root)return;
+  try{
+    const q=encodeURIComponent(`'${root}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const r=await gdFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1000`);
+    const files=(await r.json()).files||[];
+    const localIds=new Set(moments.map(m=>m.id));
+    driveOnly=files.filter(f=>!localIds.has(f.name))
+      .map(f=>({driveOnly:true,id:f.name,folder_id:f.id}));
+    // dołącz folder_id do lokalnych, jeśli istnieją na Drive a lokalnie brak id
+    files.forEach(f=>{
+      const m=moments.find(x=>x.id===f.name);
+      if(m&&!m.drive.folder_id){m.drive.folder_id=f.id;m.drive.synced_at=m.drive.synced_at||new Date().toISOString();}
+    });
+    saveMoments();
+    renderKolekcja();
+    logMsg(`☁ Drive: ${files.length} kapsuł w archiwum`,'ok');
+  }catch(e){showErr('Drive lista: '+e.message);}
+}
+$('kolRefresh').addEventListener('click',async()=>{
+  if(!gdToken){try{await gdAuth();}catch(e){showErr(e.message);return;}}
+  refreshDriveList();
+});
+async function driveChildren(folderId){
+  const q=encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+  const r=await gdFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)`);
+  return(await r.json()).files||[];
+}
+async function driveBlob(fileId){
+  const r=await gdFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+  return r.blob();
+}
+async function loadDriveMoment(entry){
+  const kids=await driveChildren(entry.folder_id);
+  const jf=kids.find(k=>k.name==='moment.json');
+  if(!jf)throw new Error('Brak moment.json w folderze');
+  const m=JSON.parse(await(await driveBlob(jf.id)).text());
+  m.drive=m.drive||{};
+  m.drive.folder_id=entry.folder_id;
+  m.drive.json_id=jf.id;
+  const af=kids.find(k=>k.name.startsWith('audio.'));
+  const pf=kids.find(k=>k.name==='photo.jpg');
+  if(af)m.drive.audio_id=af.id;
+  if(pf)m.drive.photo_id=pf.id;
+  m._hasAudio=!!af;m._hasPhoto=!!pf;m._driveOnly=true;
+  return m;
+}
+async function trashMoment(m){
+  if(m.drive&&m.drive.folder_id&&gdToken){
+    await gdFetch(`https://www.googleapis.com/drive/v3/files/${m.drive.folder_id}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({trashed:true})});
+    logMsg('🗑 '+m.id+' → kosz Drive (odwracalne ~30 dni)','warn');
+  }
+  const i=moments.findIndex(x=>x.id===m.id);
+  if(i>=0)moments.splice(i,1);
+  driveOnly=driveOnly.filter(d=>d.id!==m.id);
+  await idbDel(m.id+'_audio').catch(()=>{});
+  await idbDel(m.id+'_photo').catch(()=>{});
+  saveMoments();updNavCount();
+}
+
+// ─── KOLEKCJA ─────────────────────────────────────────────────────────
+function fmtStamp(id){
+  // CHWILA_YYYYMMDD_HHMMSS → czytelna data
+  const m=id.match(/(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
+  if(!m)return id;
+  return`${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`;
+}
+function updNavCount(){
+  const n=moments.length+driveOnly.length;
+  $('navCount').textContent=n?`(${n})`:'';
+}
+let thumbUrls={};
+async function renderKolekcja(){
+  updNavCount();
+  const grid=$('kolGrid');
+  const all=[...moments.map(m=>({m,local:true})),
+    ...driveOnly.map(d=>({m:d,local:false}))]
+    .sort((a,b)=>(b.m.id||'').localeCompare(a.m.id||''));
+  $('kolCount').textContent=`KOLEKCJA — ${all.length} KAPSUŁ`;
+  if(!all.length){
+    grid.innerHTML='<div class="kolEmpty">Pusto.<br>Wróć na WIZJER i zatrzymaj pierwszą chwilę.</div>';
+    return;
+  }
+  grid.innerHTML='';
+  for(const{m,local}of all){
+    const card=document.createElement('div');
+    card.className='kolCard';
+    const sync=local
+      ?(m.drive&&m.drive.synced_at?'<span class="kolSync synced">✓ DRIVE</span>':'<span class="kolSync local">● LOKALNIE</span>')
+      :'<span class="kolSync cloud">☁ TYLKO DRIVE</span>';
+    const place=local?(m.mezzo?.address?.city||m.mezzo?.address?.country||'—'):'…';
+    card.innerHTML=`<div class="kolNoThumb">${local&&m.type==='audio'?'♪':'○'}</div>
+      <div class="kolInfo"><div class="kolDate">${esc(fmtStamp(m.id))}</div>
+      <div class="kolPlace">${esc(place)}</div>${sync}</div>`;
+    card.addEventListener('click',()=>openKapsula(m,local));
+    grid.appendChild(card);
+    // miniatura foto asynchronicznie
+    if(local&&m._hasPhoto){
+      idbGet(m.id+'_photo').then(b=>{
+        if(!b)return;
+        if(thumbUrls[m.id])URL.revokeObjectURL(thumbUrls[m.id]);
+        thumbUrls[m.id]=URL.createObjectURL(b);
+        const img=document.createElement('img');
+        img.className='kolThumb';img.src=thumbUrls[m.id];
+        card.replaceChild(img,card.firstChild);
+      }).catch(()=>{});
+    }
+  }
+}
+function renderKolekcjaSoft(){
+  if($('scr-kolekcja').classList.contains('active'))renderKolekcja();
+  else updNavCount();
+}
+
+// ─── KAPSUŁA ──────────────────────────────────────────────────────────
+let kapMoment=null,kapLayer='opowiesc',kapAudioUrl=null,kapPhotoUrl=null;
+document.querySelectorAll('.layerBtn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.layerBtn').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel');kapLayer=b.dataset.layer;renderKapsula();
+}));
+async function openKapsula(m,local){
+  if(!local){
+    // kapsuła tylko-Drive: dociągnij moment.json
+    try{
+      $('kapTitle').textContent='☁ ŁADOWANIE Z DRIVE...';
+      showScreen('kapsula');
+      m=await loadDriveMoment(m);
+    }catch(e){showErr('Drive: '+e.message);showScreen('kolekcja');return;}
+  }
+  kapMoment=m;kapLayer='opowiesc';
+  document.querySelectorAll('.layerBtn').forEach(x=>
+    x.classList.toggle('sel',x.dataset.layer==='opowiesc'));
+  if(kapAudioUrl){URL.revokeObjectURL(kapAudioUrl);kapAudioUrl=null;}
+  if(kapPhotoUrl){URL.revokeObjectURL(kapPhotoUrl);kapPhotoUrl=null;}
+  showScreen('kapsula');
+  renderKapsula();
+}
+function W(name,scale,inner){
+  return`<div class="warstwa"><div class="wLbl"><span class="wName">${name}</span><span class="wScale">${scale}</span></div>${inner}</div>`;
+}
+function row(k,v){return`<div class="wRow"><span class="wKey">${k}</span><span class="wVal">${v==null||v===''?'—':esc(String(v))}</span></div>`;}
+async function renderKapsula(){
+  const m=kapMoment;if(!m)return;
+  $('kapTitle').textContent=fmtStamp(m.id)+(m.type==='metadata_only'?'  ·  📌 BEZ AUDIO':'');
+  const body=$('kapBody');
+  const A=m.mezzo?.address||{};
+
+  // media
+  let mediaHtml='';
+  if(m._hasPhoto){
+    mediaHtml+=`<img class="wPhoto" id="kapPhoto" alt="foto chwili" style="display:none">`;
+  }
+  if(m.type==='audio'){
+    mediaHtml+=m._driveOnly
+      ?`<button class="aAudio" id="kapPlayDrive" style="width:100%;padding:10px;background:transparent;border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:10px">▶ ODTWÓRZ Z DRIVE</button><div id="kapAudioSlot"></div>`
+      :`<audio class="wAudio" id="kapAudio" controls></audio>`;
+  }
+
+  if(kapLayer==='opowiesc'){
+    body.innerHTML=
+      W('SŁYSZĘ / WIDZĘ','MIKRO — ciało',
+        mediaHtml+
+        row('CZAS TRWANIA',m.capture?.duration_s?fmtDur(m.capture.duration_s):null)+
+        row('GŁOŚNOŚĆ ŚR./SZCZYT',m.capture?.avg_db!=null?`${m.capture.avg_db} / ${m.capture.peak_db} dBFS`:null)+
+        row('PORA DNIA',m.mikro?.time_of_day))+
+      W('MOJA NOTATKA','MIKRO — głos',
+        `<textarea class="wNote" id="kapNote" placeholder="co widzisz? co czujesz?">${esc(m.note||'')}</textarea>`)+
+      W('STOJĘ','MEZZO — miejsce',
+        row('MIEJSCE',m.mezzo?.location_name)+
+        row('OSIEDLE',A.neighbourhood)+row('DZIELNICA',A.suburb||A.district)+
+        row('MIASTO',A.city)+row('REGION',A.region)+row('KRAJ',A.country)+
+        row('CZĘŚĆ KONTYNENTU',A.continent_region)+
+        row('WSPÓŁRZĘDNE',m.mezzo?.gps?`${m.mezzo.gps.lat.toFixed(5)}, ${m.mezzo.gps.lng.toFixed(5)}`:null)+
+        row('WYSOKOŚĆ',m.mezzo?.gps?.alt!=null?Math.round(m.mezzo.gps.alt)+' m n.p.m.':null)+
+        (m.mezzo?.wiki_nearby?.length?`<div class="wText" style="margin-top:6px">📚 ${esc(m.mezzo.wiki_nearby.join(' · '))}</div>`:''))+
+      W('PLANETA','MAKRO — atmosfera',
+        row('TEMPERATURA',m.makro?.weather?m.makro.weather.temp+' °C':null)+
+        row('WILGOTNOŚĆ',m.makro?.weather?m.makro.weather.humidity+' %':null)+
+        row('CIŚNIENIE',m.makro?.weather?m.makro.weather.pressure+' hPa':null)+
+        row('WIATR',m.makro?.weather?`${m.makro.weather.windSpeed} m/s ${m.makro.weather.windDir}`:null)+
+        row('ZACHMURZENIE',m.makro?.weather?m.makro.weather.clouds+' %':null)+
+        row('OPAD',m.makro?.weather?m.makro.weather.precip+' mm':null)+
+        row('PORA ROKU',m.makro?.season)+
+        row('WSCHÓD / ZACHÓD',m.makro?.sun?`${m.makro.sun.sunrise} / ${m.makro.sun.sunset}`:null))+
+      W('KOSMOS','MAKRO — nade mną',
+        row('KSIĘŻYC',m.symbol?.moon?`${m.symbol.moon.emoji} ${m.symbol.moon.name} (${m.symbol.moon.pct}%)`:null)+
+        (m.makro?.planets_visible?.length
+          ?m.makro.planets_visible.map(p=>`<div class="planetRow"><span>✦ ${esc(p.name)}</span><span class="pc">${esc(p.constellation)} · ${p.altitude_deg}° nad horyzontem</span></div>`).join('')
+          :row('PLANETY NAD HORYZONTEM',null))+
+        row('POGODA KOSMICZNA',m.makro?.space_weather)+
+        row('SEJSMIKA',m.makro?.earthquakes)+
+        row('SAMOLOTY',Array.isArray(m.makro?.flights_overhead)&&m.makro.flights_overhead.length
+          ?m.makro.flights_overhead.map(f=>f.callsign).join(', '):null))+
+      W('ZEITGEIST','MAKRO — czym żył świat',
+        ['polska','europa','swiat'].map(k=>{
+          const t=m.zeitgeist?.[k]||[];
+          return`<div class="newsH">${k.toUpperCase()}</div>`+
+            (t.length?t.map(x=>`<div class="newsT">${esc(x)}</div>`).join(''):'<div class="wText">—</div>');
+        }).join(''))+
+      W('SYMBOL','poza skalą — pieczęć',
+        `<div class="wSeal">${esc(m.symbol?.seal_sentence||'')}</div>`+
+        row('ZODIAK',m.symbol?.zodiac?`${m.symbol.zodiac.symbol} ${m.symbol.zodiac.name}`:null)+
+        row('ROK CHIŃSKI',m.symbol?.chinese_year?`${m.symbol.chinese_year.emoji} ${m.symbol.chinese_year.element} ${m.symbol.chinese_year.animal} ${m.symbol.chinese_year.year}`:null))+
+      kapActionsHtml(m);
+  }else{
+    // warstwa DŹWIĘK — karta field-recordingu, pola edytowalne per ujęcie
+    const S=m.session||{};
+    body.innerHTML=
+      W('UJĘCIE','field recording',
+        mediaHtml+
+        row('PLIK',m.id)+
+        row('FORMAT',m.capture?.mime)+
+        row('ROZMIAR',m.capture?.size_bytes?fmtSz(m.capture.size_bytes):null)+
+        row('CZAS',m.capture?.duration_s?fmtDur(m.capture.duration_s):null)+
+        row('GAIN',m.capture?.gain)+
+        row('ŚREDNIA / SZCZYT',m.capture?.avg_db!=null?`${m.capture.avg_db} / ${m.capture.peak_db} dBFS`:null))+
+      W('WARUNKI AKUSTYCZNE','istotne dla dźwięku',
+        row('WIATR',m.makro?.weather?`${m.makro.weather.windSpeed} m/s ${m.makro.weather.windDir}`:null)+
+        row('WILGOTNOŚĆ',m.makro?.weather?m.makro.weather.humidity+' %':null)+
+        row('OPAD',m.makro?.weather?m.makro.weather.precip+' mm':null)+
+        row('TEMPERATURA',m.makro?.weather?m.makro.weather.temp+' °C':null))+
+      W('METRYKA UJĘCIA','edytowalna',
+        fieldHtml('MIKROFON / REJESTRATOR','mic',S.mic)+
+        fieldHtml('REALIZATOR','recordist',S.recordist)+
+        fieldHtml('PROJEKT / KOLEKCJA','project',S.project)+
+        fieldHtml('SIEDLISKO / HABITAT','habitat',S.habitat)+
+        `<div class="wField"><span class="wKey">NOTATKI TECHNICZNE (warunki nagrania)</span>
+         <textarea class="wInput sessEdit" data-f="tech_notes" rows="3" placeholder="osłona przeciwwietrzna, odległość od źródła, zakłócenia...">${esc(S.tech_notes||'')}</textarea></div>`)+
+      kapActionsHtml(m);
+  }
+
+  // podłącz zachowania
+  wireKapsula(m);
+}
+function fieldHtml(label,f,val){
+  return`<div class="wField"><span class="wKey">${label}</span>
+    <input class="wInput sessEdit" data-f="${f}" value="${esc(val||'')}"></div>`;
+}
+function kapActionsHtml(m){
+  return`<div id="kapActions">
+    ${m.type==='audio'?'<button class="aAudio" id="actAudio">↓ AUDIO</button>':''}
+    <button class="aJson" id="actJson">↓ JSON</button>
+    <button class="aDrive" id="actDrive">${m.drive?.synced_at?'☁ AKTUALIZUJ':'↑ DRIVE'}</button>
+    <button class="aDel" id="actDel">🗑 KOSZ</button>
+  </div>`;
+}
+let noteTimer=null;
+function wireKapsula(m){
+  // foto
+  const ph=$('kapPhoto');
+  if(ph){
+    (m._driveOnly&&m.drive?.photo_id
+      ?driveBlob(m.drive.photo_id)
+      :idbGet(m.id+'_photo')
+    ).then(b=>{
+      if(!b)return;
+      if(kapPhotoUrl)URL.revokeObjectURL(kapPhotoUrl);
+      kapPhotoUrl=URL.createObjectURL(b);
+      ph.src=kapPhotoUrl;ph.style.display='block';
+    }).catch(()=>{});
+  }
+  // audio lokalne
+  const au=$('kapAudio');
+  if(au&&!m._driveOnly){
+    idbGet(m.id+'_audio').then(b=>{
+      if(!b)return;
+      if(kapAudioUrl)URL.revokeObjectURL(kapAudioUrl);
+      kapAudioUrl=URL.createObjectURL(b);au.src=kapAudioUrl;
+    }).catch(()=>{});
+  }
+  // audio z Drive (streaming na żądanie)
+  const pd=$('kapPlayDrive');
+  if(pd)pd.addEventListener('click',async()=>{
+    try{
+      pd.textContent='◌ POBIERANIE...';
+      const b=await driveBlob(m.drive.audio_id);
+      if(kapAudioUrl)URL.revokeObjectURL(kapAudioUrl);
+      kapAudioUrl=URL.createObjectURL(b);
+      $('kapAudioSlot').innerHTML='<audio class="wAudio" controls autoplay></audio>';
+      $('kapAudioSlot').firstChild.src=kapAudioUrl;
+      pd.style.display='none';
+    }catch(e){showErr('Drive audio: '+e.message);pd.textContent='▶ ODTWÓRZ Z DRIVE';}
+  });
+  // notatka — autozapis z opóźnieniem
+  const note=$('kapNote');
+  if(note)note.addEventListener('input',()=>{
+    m.note=note.value;
+    clearTimeout(noteTimer);
+    noteTimer=setTimeout(()=>{saveMoments();queueJsonUpdate(m);},1200);
+  });
+  // pola sesji per ujęcie
+  document.querySelectorAll('.sessEdit').forEach(el=>el.addEventListener('change',()=>{
+    m.session[el.dataset.f]=el.value;
+    saveMoments();queueJsonUpdate(m);
+  }));
+  // akcje
+  const aA=$('actAudio');
+  if(aA)aA.addEventListener('click',async()=>{
+    const b=m._driveOnly?await driveBlob(m.drive.audio_id).catch(()=>null):await idbGet(m.id+'_audio');
+    if(!b){showErr('Brak pliku audio');return;}
+    const ext=(m.capture.mime||'').includes('mp4')?'m4a':(m.capture.mime||'').includes('ogg')?'ogg':'webm';
+    dlBlob(b,m.id+'.'+ext);
+  });
+  $('actJson').addEventListener('click',()=>{
+    const clean={...m};delete clean._hasAudio;delete clean._hasPhoto;delete clean._driveOnly;
+    dlBlob(new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),m.id+'.json');
+  });
+  $('actDrive').addEventListener('click',async()=>{
+    if(!gdToken){try{await gdAuth();}catch(e){showErr(e.message);return;}}
+    $('actDrive').textContent='⏳ ...';
+    if(m.drive?.synced_at)m.drive.json_id=m.drive.json_id||null;
+    const ok=await uploadMoment(m);
+    $('actDrive').textContent=ok?'✓ DRIVE':'↑ DRIVE';
+    renderKolekcjaSoft();
+  });
+  $('actDel').addEventListener('click',async()=>{
+    if(!confirm('Przenieść kapsułę do kosza Drive i usunąć z urządzenia?\n(Na Drive odwracalne ~30 dni)'))return;
+    try{await trashMoment(m);showScreen('kolekcja');}
+    catch(e){showErr('Usuwanie: '+e.message);}
+  });
+}
+function queueJsonUpdate(m){
+  // aktualizacja moment.json na Drive gdy kapsuła już zsynchronizowana
+  if(gdToken&&navigator.onLine&&m.drive?.json_id){
+    const clean={...m};delete clean._hasAudio;delete clean._hasPhoto;delete clean._driveOnly;
+    gdUploadFile('moment.json',
+      new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),
+      m.drive.folder_id,m.drive.json_id).catch(()=>{});
+  }
+}
+function dlBlob(blob,name){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+}
+
+// ─── START ────────────────────────────────────────────────────────────
+$('stDevice').value=navigator.userAgent.match(/\(([^)]+)\)/)?.[1]?.split(';')[0]||navigator.platform||'Nieznane';
+window.addEventListener('load',async()=>{
+  loadMoments();loadSettings();updNavCount();
+  try{await idbOpen();}catch(e){showErr('IndexedDB: '+e.message);}
+  initMedia();
+  if('serviceWorker'in navigator)
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  backfillAll();
+});
+</script>
+</body>
+</html>
